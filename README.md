@@ -4,6 +4,15 @@ Bazel rules for Elixir sources
 
 Compatible with [rules_erlang](https://github.com/rabbitmq/rules_erlang)
 
+## Maintenance Status
+
+Team RabbitMQ were using Bazel heavily alongside `erlang.mk` for a few years for its parallel
+builds and caching features.
+
+However, `erlang.mk` has caught up and Bazel fell out of use.
+
+Therefore, **this project is not actively maintained**. It has been forked, and an actively maintained version is located at [marvin-hansen/rules_elixir](https://github.com/marvin-hansen/rules_elixir).
+
 ## Examples
 
 See the `examples` directory
