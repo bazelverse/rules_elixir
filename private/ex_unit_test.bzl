@@ -108,8 +108,20 @@ ${{ABS_ELIXIR_HOME}}/bin/elixir \\
     {srcs_args} \\
     | tee test.log
 set +x
-tail -n 4 test.log | grep -E --silent "0 failure"
-tail -n 4 test.log | grep -E --silent "[0-9] test"
+# A failing suite makes elixir exit non-zero, and the `set -eo pipefail` above
+# carries that through the tee, so the failure path needs no assertion of its
+# own. The one thing an exit code cannot express is a suite that executed no
+# tests at all: ExUnit reports that as success, which lets a target whose
+# sources silently stopped matching any test pass forever. Assert against it.
+#
+# Elixir 1.20 replaced the "N tests, M failures" summary with "Result: N passed",
+# "Result: N/M passed" and "Result: 0 tests", so both spellings are matched here.
+# Reading the summary text is only acceptable for this one condition; everything
+# else defers to the exit code, which does not change between releases.
+if tail -n 4 test.log | grep -Eq "Result: 0 tests|(^|[^0-9])0 tests,"; then
+    echo "ex_unit_test: the suite executed no tests" >&2
+    exit 1
+fi
 rm test.log
 """.format(
             maybe_install_erlang = maybe_install_erlang(ctx, short_path = True),
