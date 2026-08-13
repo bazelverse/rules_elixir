@@ -1,3 +1,11 @@
+# CI covers the latest two Elixir minors against the latest two OTP majors.
+# Elixir supports a moving window of OTP majors (1.20 covers 27-29, 1.19 covers
+# 26-28), so the pairs are pinned explicitly rather than crossed: crossing them
+# would generate combinations Elixir does not support. Earlier versions may work
+# but are not tested here. See the supported versions table in README.md.
+#
+# The Bazel matrix lives in .bcr/presubmit.yml, which covers 8.x and 9.x. These
+# jobs use the version pinned in .bazelversion.
 name: Test
 on:
   push:
@@ -7,43 +15,62 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - otp: "28.5"
+            elixir: "1.19.5-otp-28"
+          - otp: "29.0"
+            elixir: "1.20.3-otp-29"
     steps:
       - name: CHECKOUT REPOSITORY
         uses: actions/checkout@v4
       - name: SETUP ERLANG/ELIXIR
         uses: erlef/setup-beam@v1
         with:
-          otp-version: 26
-          elixir-version: 1.15
+          otp-version: ${{ matrix.otp }}
+          elixir-version: ${{ matrix.elixir }}
       - name: CONFIGURE
         run: |
-          echo "build --color=yes" >> .bazelrc
+          echo "build --color=yes" >> user.bazelrc
       - name: BUILD
         run: |
           bazelisk build //... \
             --verbose_failures
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - otp: "28.5"
+            elixir: "1.19.5-otp-28"
+          - otp: "29.0"
+            elixir: "1.20.3-otp-29"
     steps:
       - name: CHECKOUT REPOSITORY
         uses: actions/checkout@v4
       - name: SETUP ERLANG/ELIXIR
         uses: erlef/setup-beam@v1
         with:
-          otp-version: 26
-          elixir-version: 1.15
+          otp-version: ${{ matrix.otp }}
+          elixir-version: ${{ matrix.elixir }}
       - name: CONFIGURE
         working-directory: test
         run: |
-          echo "build --color=yes" >> .bazelrc
+          echo "build --color=yes" >> user.bazelrc
       - name: BUILD & TEST
         working-directory: test
         run: |
           bazelisk test //...
       - name: CHECK LOGS
         working-directory: test
+        # Elixir 1.20 replaced "N tests, M failures" with "Result: N passed", so
+        # both spellings are accepted while the matrix spans 1.19 and 1.20.
         run: |
-          grep "2 tests, 0 failures" bazel-testlogs/two_file_test/test.log
+          grep -E "Result: 2 passed|2 tests, 0 failures" \
+            bazel-testlogs/two_file_test/test.log
       - name: EXPECTED FAILURES FAIL
         working-directory: test
         run: |
@@ -54,23 +81,31 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: bazel-testlogs
+          name: bazel-testlogs-${{ matrix.otp }}
           path: |
             test/bazel-testlogs/*
   examples-basic:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - otp: "28.5"
+            elixir: "1.19.5-otp-28"
+          - otp: "29.0"
+            elixir: "1.20.3-otp-29"
     steps:
       - name: CHECKOUT REPOSITORY
         uses: actions/checkout@v4
       - name: SETUP ERLANG/ELIXIR
         uses: erlef/setup-beam@v1
         with:
-          otp-version: 26
-          elixir-version: 1.15
+          otp-version: ${{ matrix.otp }}
+          elixir-version: ${{ matrix.elixir }}
       - name: CONFIGURE
         working-directory: examples/basic
         run: |
-          echo "build --color=yes" >> .bazelrc
+          echo "build --color=yes" >> user.bazelrc
       - name: BUILD & TEST
         working-directory: examples/basic
         run: |
@@ -79,10 +114,12 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: bazel-testlogs-examples-basic
+          name: bazel-testlogs-examples-basic-${{ matrix.otp }}
           path: |
             examples/basic/bazel-testlogs/*
   examples-internal-elixir:
+    # Builds both Erlang and Elixir from source, so it pins its own versions in
+    # MODULE.bazel and takes no setup-beam. Single configuration by design.
     runs-on: ubuntu-latest
     steps:
       - name: CHECKOUT REPOSITORY
@@ -104,21 +141,17 @@ jobs:
       - name: CONFIGURE
         working-directory: examples/internal-elixir
         run: |
-          cat << EOF >> .bazelrc
+          cat << EOF >> user.bazelrc
             build --disk_cache=/home/runner/disk-cache
             build --color=yes
           EOF
-      # - name: Setup tmate session
-      #   uses: mxschmitt/action-tmate@v3
       - name: BUILD & TEST
         working-directory: examples/internal-elixir
         env:
           ELIXIR_ERL_OPTIONS: +fnu
         run: |
           bazelisk test //... \
-            --config=ie-26_2 \
-            --toolchain_resolution_debug='@@rules_erlang~//tools:toolchain_type' \
-            --toolchain_resolution_debug='@@rules_elixir~//:toolchain_type' \
+            --config=ie-29 \
             --verbose_failures
       - name: UPLOAD TEST LOGS
         if: always()

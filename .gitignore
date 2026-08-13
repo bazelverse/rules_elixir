@@ -1,1 +1,8 @@
 /bazel-*
+/user.bazelrc
+.agents
+.claude
+.code/
+.idea/
+.DS_Store
+MODULE.bazel.lock

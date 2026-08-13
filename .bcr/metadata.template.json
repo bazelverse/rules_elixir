@@ -1,14 +1,14 @@
 {
-  "homepage": "https://github.com/rabbitmq/rules_elixir",
+  "homepage": "https://github.com/bazelverse/rules_elixir",
   "maintainers": [
     {
-      "email": "rin.kuryloski@broadcom.com",
-      "github": "pjk25",
-      "name": "Rin Kuryloski"
+      "email": "marvin.hansen@gmail.com",
+      "github": "marvin-hansen",
+      "name": "Marvin Hansen"
     }
   ],
   "repository": [
-    "github:rabbitmq/rules_elixir"
+    "github:bazelverse/rules_elixir"
   ],
   "versions": [],
   "yanked_versions": {}

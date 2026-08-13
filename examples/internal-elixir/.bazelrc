@@ -1,15 +1,19 @@
 build --registry=https://bcr.bazel.build/
-build --registry=https://raw.githubusercontent.com/rabbitmq/bazel-central-registry/erlang-packages/
 
 # build --incompatible_strict_action_env
 
-build --bes_results_url=https://app.buildbuddy.io/invocation/
-build --bes_backend=grpcs://remote.buildbuddy.io
-
+# Select the Erlang and Elixir this example builds from source rather than
+# whatever the host carries. "ie" picks the internal toolchain on its own; the
+# suffixed configs additionally pin a platform, which is what makes the major
+# and major_minor toolchains distinguishable from each other.
 build:ie --host_platform=//:erlang_internal_platform
 
-build:ie-26 --config=ie
-build:ie-26 --platforms=//:erlang_linux_26_platform
+build:ie-29 --config=ie
+build:ie-29 --platforms=//:erlang_linux_29_platform
+build:ie-29 --extra_execution_platforms=//:erlang_linux_29_platform
 
-build:ie-26_2 --config=ie
-build:ie-26_2 --platforms=//:erlang_linux_26_2_platform
+build:ie-29_0 --config=ie
+build:ie-29_0 --platforms=//:erlang_linux_29_0_platform
+build:ie-29_0 --extra_execution_platforms=//:erlang_linux_29_0_platform
+
+try-import %workspace%/user.bazelrc

@@ -6,6 +6,7 @@ load(
     "ELIXIR_VARS_ENV_MAP_INTERNAL",
 )
 load("@rules_erlang//:escript.bzl", "escript_archive")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
 
 elixir_app(
     app_name = "basic",
@@ -86,6 +87,11 @@ ex_unit_test(
     tags = ["manual"],
 )
 
+# Asserts that a failure in the elixir invocation itself, rather than in a test
+# case, still fails the target. This used to pass "-e ExUnit.configure(seed: 0)"
+# and rely on that raising because ExUnit had not been started yet; Elixir 1.20
+# accepts it, so the target stopped being broken and the assertion below stopped
+# asserting anything. Raising outright breaks on every version.
 ex_unit_test(
     name = "broken_test",
     srcs = [
@@ -93,7 +99,7 @@ ex_unit_test(
     ],
     elixir_opts = [
         "-e",
-        "ExUnit.configure(seed: 0)",
+        'raise "intentionally broken"',
     ],
     env = {
         "ERL_COMPILER_OPTIONS": "deterministic",

@@ -76,7 +76,12 @@ ${{ABS_ELIXIR_HOME}}/bin/elixirc \\
     )
 
     inputs = depset(
-        direct = ctx.files.srcs + erl_libs_files,
+        # ctx.files.data: Elixir modules routinely read files at COMPILE time --
+        # @moduledoc File.read!("README.md") and @external_resource are both common in
+        # Hex packages (crux and sourceror in the Ash closure alone). Without a way to
+        # declare those, the file exists in the repository but never reaches the sandbox
+        # and compilation fails on a missing file.
+        direct = ctx.files.srcs + ctx.files.data + erl_libs_files,
         transitive = [
             erlang_runfiles.files,
             elixir_runfiles.files,
@@ -102,6 +107,7 @@ elixir_bytecode = rule(
         "srcs": attr.label_list(
             allow_files = [".ex"],
         ),
+        "data": attr.label_list(allow_files = True),
         "elixirc_opts": attr.string_list(),
         "env": attr.string_dict(),
         "deps": attr.label_list(
