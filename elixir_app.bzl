@@ -8,6 +8,7 @@ def elixir_app(
         app_name = None,
         extra_apps = [],
         srcs = None,
+        data = [],
         elixirc_opts = [],
         ez_deps = [],
         deps = [],
@@ -36,6 +37,7 @@ def elixir_app(
     elixir_bytecode(
         name = "beam_files",
         srcs = srcs,
+        data = data,
         dest = "beam_files",
         elixirc_opts = elixirc_opts,
         ez_deps = ez_deps,
@@ -72,7 +74,10 @@ def elixir_app(
         app_name = app_name,
         beam = [":ebin"],
         extra_apps = extra_apps,
-        license_files = native.glob(["LICENSE*"]),
+        # allow_empty: plenty of Hex packages ship no LICENSE file (ash among them), and
+        # with --incompatible_disallow_empty_glob on -- the default since Bazel 7 -- an
+        # empty glob is a hard error, so those packages could not be built at all.
+        license_files = native.glob(["LICENSE*"], allow_empty = True),
         priv = [],
         visibility = ["//visibility:public"],
         deps = [
