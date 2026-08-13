@@ -1,0 +1,37 @@
+# Opens a PR against the Bazel Central Registry when a release is published.
+#
+# Prerequisites, both one-time and both outside this repository:
+#   1. A fork of bazelbuild/bazel-central-registry under the bazelverse org.
+#   2. A classic PAT with `repo` and `workflow` scopes, stored as the
+#      BCR_PUBLISH_TOKEN Actions secret.
+#
+# Replaces a workflow that published to rabbitmq/bazel-central-registry@erlang-packages,
+# a private registry fork this project can no longer write to.
+#
+# Note that rules_elixir cannot actually land in the registry until rules_erlang
+# 3.18.0 does, because the BCR presubmit resolves the full module graph and
+# overrides do not apply to a non-root module.
+name: Publish to BCR
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: Release tag to publish
+        required: true
+        type: string
+
+jobs:
+  publish:
+    uses: bazel-contrib/publish-to-bcr/.github/workflows/publish.yaml@v1.4.2
+    with:
+      tag_name: ${{ inputs.tag_name || github.ref_name }}
+      registry_fork: bazelverse/bazel-central-registry
+      attest: true
+    permissions:
+      attestations: write
+      contents: write
+      id-token: write
+    secrets:
+      publish_token: ${{ secrets.BCR_PUBLISH_TOKEN }}
