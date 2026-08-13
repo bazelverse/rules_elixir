@@ -7,24 +7,102 @@ Built on [rules_erlang](https://github.com/bazelverse/rules_erlang), and require
 it. Elixir applications are OTP applications, so the Erlang toolchain, the app
 metadata and the `ERL_LIBS` staging all come from there.
 
-Requires Bazel 7 or newer, and `rules_erlang` 3.18.0 or newer.
+## Supported versions
+
+Requires bzlmod and `rules_erlang` 3.18.0 or newer. Bazel 7 is not supported;
+the Bazel Central Registry presubmit covers 8.x and 9.x, and `.bazelversion`
+pins what GitHub CI runs.
+
+CI covers the **latest two Elixir minors** against the **latest two OTP
+majors**. Elixir supports a moving window of OTP majors, so the pairs are tested
+as pairs rather than crossed:
+
+| Elixir | Erlang/OTP |
+| --- | --- |
+| 1.20 | 29 |
+| 1.19 | 28 |
+
+Earlier versions may well work, and nothing has been deliberately broken for
+them, but they are untested here. Treat them as use-at-your-own-risk.
 
 ## Status
 
 This repository continues rabbitmq's `rules_elixir`, which is unmaintained.
 `v1.1.0` was its last release.
 
-**1.2.0 is a drop-in replacement for 1.1.0.** Nothing in the rules breaks; every
-commit between the two tags is one documented fix or addition. See
-[CHANGELOG.md](./CHANGELOG.md).
+**For a bzlmod consumer, 1.2.0 is a drop-in replacement for 1.1.0.** No rule,
+macro, provider or attribute changed; every commit between the two tags is one
+documented fix or addition. See [CHANGELOG.md](./CHANGELOG.md).
 
 ## Installation
 
-In `MODULE.bazel`:
+> **Git pre-release only.** `rules_elixir` and `rules_erlang` are both awaiting
+> Bazel Central Registry entries, so `bazel_dep` alone will not resolve and you
+> need an override for each. Overrides only take effect in the **root module**,
+> which is why you declare both even though only one is a direct dependency.
+> Once the registry entries land, delete the overrides and keep the `bazel_dep`
+> lines; nothing else changes.
+
+### Pinned to release tags
 
 ```starlark
 bazel_dep(name = "rules_elixir", version = "1.2.0")
+bazel_dep(name = "rules_erlang", version = "3.18.0")
 
+archive_override(
+    module_name = "rules_elixir",
+    urls = ["https://github.com/bazelverse/rules_elixir/archive/refs/tags/v1.2.0.tar.gz"],
+    strip_prefix = "rules_elixir-1.2.0",
+    integrity = "sha256-...",
+)
+
+archive_override(
+    module_name = "rules_erlang",
+    urls = ["https://github.com/bazelverse/rules_erlang/archive/refs/tags/3.18.0.tar.gz"],
+    strip_prefix = "rules_erlang-3.18.0",
+    integrity = "sha256-...",
+)
+```
+
+To get an `integrity` value, run the build once with the attribute omitted.
+Bazel fetches the archive and prints a warning containing the hash it computed;
+paste that in. A *wrong* value fails the build and names the expected one, so
+either route gets you there. Do not leave it out permanently: without it the
+archive is re-fetched unverified.
+
+Note the asymmetry in the two tags. `rules_elixir` tags with a leading `v` and
+`rules_erlang` without, so `strip_prefix` drops the `v` in one case and not the
+other. GitHub strips a leading `v` from the directory inside the archive.
+
+### Pinned to commits
+
+```starlark
+bazel_dep(name = "rules_elixir", version = "1.2.0")
+bazel_dep(name = "rules_erlang", version = "3.18.0")
+
+git_override(
+    module_name = "rules_elixir",
+    remote = "https://github.com/bazelverse/rules_elixir.git",
+    commit = "0000000000000000000000000000000000000000",
+)
+
+git_override(
+    module_name = "rules_erlang",
+    remote = "https://github.com/bazelverse/rules_erlang.git",
+    commit = "5531a30ab87ed7e2a63eb1a901c4eeac1bb2bcc6",
+)
+```
+
+`commit` takes a full SHA. Use this to track work that has no tag yet. Prefer
+the tag form for anything you ship: it is a fixed archive plus a checksum,
+rather than a repository that has to stay reachable and re-clone.
+
+The `version` in `bazel_dep` is still required either way. It is what the module
+reports to the rest of the graph; the override decides what is actually fetched.
+
+### Then, in the same `MODULE.bazel`
+
+```starlark
 elixir_config = use_extension(
     "@rules_elixir//bzlmod:extensions.bzl",
     "elixir_config",
@@ -39,10 +117,19 @@ pinned Elixir instead:
 
 ```starlark
 elixir_config.internal_elixir_from_github_release(
-    version = "1.17.3",
-    sha256 = "...",
+    version = "1.20.3",
+    sha256 = "ff22a894b130631443db1a193b4e8cb4762f697128566e43da848fd16c3777bd",
 )
 ```
+
+The `sha256` is of the source archive the extension fetches, which is
+`https://github.com/elixir-lang/elixir/archive/refs/tags/v<version>.tar.gz`, not
+one of the precompiled release assets.
+
+Building Elixir from source needs an Erlang to build it with, so pair this with
+`internal_erlang_from_github_release` from `rules_erlang` and keep the two
+versions compatible. `examples/internal-elixir` is a working setup of exactly
+that.
 
 Set `RULES_ELIXIR_SKIP_SYSTEM=1` to stop the extension probing the host for an
 Elixir install at all. That is what you want when every toolchain is hermetic:
@@ -125,15 +212,6 @@ here rather than in every consuming module.
 Fetching Hex *packages* is a different job from installing Hex the tool. For a
 handful of packages see `rules_erlang`'s `erlang_package` extension; for a whole
 application closure, its `hex_packages_extension`.
-
-## Maintenance Status
-
-Team RabbitMQ were using Bazel heavily alongside `erlang.mk` for a few years for its parallel
-builds and caching features.
-
-However, `erlang.mk` has caught up and Bazel fell out of use.
-
-Therefore, **this project is not actively maintained**. It has been forked, and an actively maintained version is located at [marvin-hansen/rules_elixir](https://github.com/marvin-hansen/rules_elixir).
 
 ## Examples
 
