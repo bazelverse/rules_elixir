@@ -182,7 +182,7 @@ application closure, its `hex_packages_extension`.
 
 ## Examples
 
-See the `examples` directory.
+See the `examples` directory. 
 
 ## License
 
