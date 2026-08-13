@@ -8,7 +8,7 @@ Continues from the **v1.1.0** tag of the unmaintained upstream, carrying the
 fixes that were being kept downstream as a vendored copy. Requires
 `rules_erlang` **3.18.0**.
 
-Every change is a separate commit, so `git diff v1.1.0..1.2.0` is exactly this
+Every change is a separate commit, so `git diff v1.1.0..v1.2.0` is exactly this
 list and nothing else.
 
 ### Fixed
@@ -56,6 +56,27 @@ list and nothing else.
   property of the platform the test *executes* on. For a test rule that is the
   target platform.
 
+  The key is a `Label`, not a bare string. A `select()` key written as a string
+  resolves against the repo mapping of the package that *instantiates* the macro,
+  so a string would have obliged every consumer to add
+  `bazel_dep(name = "platforms")` of their own and failed with "No repository
+  visible as `@platforms`" if they did not. The question never arose while the
+  key was `@bazel_tools//...`, because `bazel_tools` is an implicit dependency of
+  every module and is visible from everywhere.
+
+- **ExUnit result detection under Elixir 1.20** (`private/ex_unit_test.bzl`). The
+  runner asserted on the summary text, matching `0 failure` and `[0-9] test`.
+  Elixir 1.20 replaced `N tests, M failures` with `Result: N passed`, so under it
+  every *passing* suite failed its own assertion.
+
+  Failure detection now rests on the exit code, which the `set -eo pipefail` at
+  the top of the runner already carried through the `tee`, and which does not
+  change between releases. One assertion on the summary text remains, because
+  there is exactly one thing the exit code cannot express: a suite that executed
+  no tests reports success, which would let a target whose sources stopped
+  matching any test pass forever. Both spellings are accepted while the supported
+  window spans Elixir 1.19 and 1.20.
+
 ### Added
 
 - **`mix_archive_build`** (`mix_archive_build.bzl`,
@@ -77,7 +98,75 @@ list and nothing else.
   defaults to `DEFAULT_HEX_VERSION` and is overridable with the
   `from_github_release` tag, mirroring `internal_elixir_from_github_release`.
 
+### Removed
+
+- **Bazel 7 support**, declared as `bazel_compatibility = [">=8.0.0"]`. This
+  follows `rules_erlang` 3.18.0, which requires Bazel 8 and which this release
+  requires in turn, so 7 was already unreachable in practice.
+
+### Changed
+
+- **Dependencies moved to current stable.**
+
+  | | from | to |
+  | --- | --- | --- |
+  | rules_erlang | 3.16.0 | 3.18.0 |
+  | bazel_skylib | 1.7.1 | 1.9.2 |
+  | platforms | - | 1.1.0 (new) |
+
+  `platforms` is new because `ex_unit_test` selects on `@platforms//os:windows`;
+  see the Windows condition entry above for why the dependency belongs here
+  rather than in every consumer.
+
+- **`sh_test` loads from `@rules_shell`** (`test/BUILD.bazel`,
+  `test/MODULE.bazel`). It stopped being a native rule in Bazel 8, so the test
+  module gained both the load statement and a `rules_shell` dependency.
+
+- **`@platforms//host:host` replaces `@local_config_platform//:host`**
+  (`examples/internal-elixir`). Bazel 8 removed the autoconfigured
+  `local_config_platform` repository. The example's platforms also register
+  themselves as execution platforms, which Bazel 9 requires of any target
+  platform that has to run tests.
+
+- **The `internal-elixir` example builds OTP 29.0.5 and Elixir 1.20.3**, up from
+  OTP 26.2.5 and Elixir 1.16.1. It is the only from-source coverage there is, and
+  it was pinned two OTP majors behind the supported window.
+
+- **CI covers the latest two Elixir minors against the latest two OTP majors**,
+  currently 1.20 on OTP 29 and 1.19 on OTP 28. Elixir supports a moving window of
+  OTP majors, so the matrix tests pairs rather than crossing the two lists. The
+  Bazel matrix lives in the registry presubmit, which covers 8.x and 9.x.
+
+- **The registry presubmit installs Elixir**, which it never did. It built
+  `@rules_elixir//...` with only Erlang on the machine, leaving the external
+  Elixir toolchain nothing to resolve. It also moves from the `platforms:`
+  mapping to the `tasks:` schema, and activates the kerl build so the Elixir
+  archive finds an ERTS to run on.
+
+  The structure here comes from rabbitmq/rules_elixir#7, merged from upstream's
+  final state; the versions are this project's.
+
+- **Fix the registry source template's archive name** (`.bcr/source.template.json`).
+  It asked for `rules_elixir-{TAG}.tar.gz`, but the release workflow uploads
+  `rules_elixir-{VERSION}.tar.gz`, and this repository tags with a leading `v`.
+  The two are only equal when the tag carries no prefix, so the published URL
+  would have been `rules_elixir-v1.2.0.tar.gz` and returned a 404.
+
+- **Publishing targets the Bazel Central Registry.** The workflow that pushed to
+  `rabbitmq/bazel-central-registry@erlang-packages`, a private registry fork this
+  project cannot write to, is replaced by `bazel-contrib/publish-to-bcr`. The
+  registry entry for that fork is also dropped from every `.bazelrc`; it served
+  `rules_erlang` 3.15.x and nothing reads it now.
+
 ### Compatibility
 
-Nothing in the rules breaks. The `rules_erlang` dependency moves from 3.16.0 to
+For a bzlmod consumer, 1.2.0 is a drop-in replacement for 1.1.0: no rule, macro,
+provider or attribute changed. The `rules_erlang` dependency moves from 3.16.0 to
 3.18.0, which is itself a drop-in replacement.
+
+Requires Bazel 8 or newer. Tested on Bazel 8.7.0 and 9.2.0.
+
+Neither module is on the Bazel Central Registry yet, so a consumer needs an
+override for `rules_elixir` **and** one for `rules_erlang`. Overrides only take
+effect in the root module, which is why both are needed even though only one is a
+direct dependency. See the Installation section of the README.
