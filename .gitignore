@@ -1,1 +1,5 @@
 /bazel-*
+.agents
+.claude
+.code/
+.idea/
