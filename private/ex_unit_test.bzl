@@ -114,12 +114,20 @@ set +x
 # tests at all: ExUnit reports that as success, which lets a target whose
 # sources silently stopped matching any test pass forever. Assert against it.
 #
-# Elixir 1.20 replaced the "N tests, M failures" summary with "Result: N passed",
-# "Result: N/M passed" and "Result: 0 tests", so both spellings are matched here.
+# Running nothing is only a defect when nothing was *meant* to run. A target
+# that filters by tag and excludes everything it has is doing what it was asked
+# to, and is a normal way to shard a suite, so an exclusion count means the
+# summary is honest and the target passes.
+#
+#   Elixir 1.20   "Result: 0 tests"                vs "Result: 0 tests, 2 excluded"
+#   earlier       "0 tests, 0 failures"            vs "0 tests, 0 failures (11 excluded)"
+#
 # Reading the summary text is only acceptable for this one condition; everything
 # else defers to the exit code, which does not change between releases.
-if tail -n 4 test.log | grep -Eq "Result: 0 tests|(^|[^0-9])0 tests,"; then
-    echo "ex_unit_test: the suite executed no tests" >&2
+summary="$(tail -n 4 test.log)"
+if printf '%s\n' "$summary" | grep -Eq "Result: 0 tests|(^|[^0-9])0 tests," &&
+   ! printf '%s\n' "$summary" | grep -q "excluded"; then
+    echo "ex_unit_test: the suite executed no tests, and excluded none" >&2
     exit 1
 fi
 rm test.log

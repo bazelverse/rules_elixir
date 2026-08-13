@@ -71,11 +71,20 @@ list and nothing else.
 
   Failure detection now rests on the exit code, which the `set -eo pipefail` at
   the top of the runner already carried through the `tee`, and which does not
-  change between releases. One assertion on the summary text remains, because
-  there is exactly one thing the exit code cannot express: a suite that executed
-  no tests reports success, which would let a target whose sources stopped
-  matching any test pass forever. Both spellings are accepted while the supported
+  change between releases.
+
+  One assertion on the summary text remains, because there is exactly one thing
+  the exit code cannot express: a suite that executed no tests reports success,
+  which would let a target whose sources stopped matching any test pass forever.
+  It fires only when nothing ran *and* nothing was excluded. A target that
+  filters by tag and excludes everything it has is doing what it was asked to,
+  and is a normal way to shard a suite, so an exclusion count means the summary
+  is honest and the target passes. Both spellings are read while the supported
   window spans Elixir 1.19 and 1.20.
+
+  This is the one behavioural difference from 1.1.0. A suite that defines no
+  tests at all, and excludes none, passed before and now fails. That is the case
+  `//:empty_test` has always asserted should fail.
 
 ### Added
 
@@ -163,6 +172,10 @@ list and nothing else.
 For a bzlmod consumer, 1.2.0 is a drop-in replacement for 1.1.0: no rule, macro,
 provider or attribute changed. The `rules_erlang` dependency moves from 3.16.0 to
 3.18.0, which is itself a drop-in replacement.
+
+One behaviour differs, described under the ExUnit entry above: an `ex_unit_test`
+that runs no tests and excludes none now fails rather than passes. A target that
+excludes everything by tag is unaffected.
 
 Requires Bazel 8 or newer. Tested on Bazel 8.7.0 and 9.2.0.
 
