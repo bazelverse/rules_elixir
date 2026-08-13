@@ -43,39 +43,6 @@ documented fix or addition. See [CHANGELOG.md](./CHANGELOG.md).
 > Once the registry entries land, delete the overrides and keep the `bazel_dep`
 > lines; nothing else changes.
 
-### Pinned to release tags
-
-```starlark
-bazel_dep(name = "rules_elixir", version = "1.2.0")
-bazel_dep(name = "rules_erlang", version = "3.18.0")
-
-archive_override(
-    module_name = "rules_elixir",
-    urls = ["https://github.com/bazelverse/rules_elixir/archive/refs/tags/v1.2.0.tar.gz"],
-    strip_prefix = "rules_elixir-1.2.0",
-    integrity = "sha256-...",
-)
-
-archive_override(
-    module_name = "rules_erlang",
-    urls = ["https://github.com/bazelverse/rules_erlang/archive/refs/tags/3.18.0.tar.gz"],
-    strip_prefix = "rules_erlang-3.18.0",
-    integrity = "sha256-...",
-)
-```
-
-To get an `integrity` value, run the build once with the attribute omitted.
-Bazel fetches the archive and prints a warning containing the hash it computed;
-paste that in. A *wrong* value fails the build and names the expected one, so
-either route gets you there. Do not leave it out permanently: without it the
-archive is re-fetched unverified.
-
-Note the asymmetry in the two tags. `rules_elixir` tags with a leading `v` and
-`rules_erlang` without, so `strip_prefix` drops the `v` in one case and not the
-other. GitHub strips a leading `v` from the directory inside the archive.
-
-### Pinned to commits
-
 ```starlark
 bazel_dep(name = "rules_elixir", version = "1.2.0")
 bazel_dep(name = "rules_erlang", version = "3.18.0")
@@ -83,22 +50,22 @@ bazel_dep(name = "rules_erlang", version = "3.18.0")
 git_override(
     module_name = "rules_elixir",
     remote = "https://github.com/bazelverse/rules_elixir.git",
-    commit = "0000000000000000000000000000000000000000",
+    commit = "0000000000000000000000000000000000000000",  # v1.2.0
 )
 
 git_override(
     module_name = "rules_erlang",
     remote = "https://github.com/bazelverse/rules_erlang.git",
-    commit = "5531a30ab87ed7e2a63eb1a901c4eeac1bb2bcc6",
+    commit = "5531a30ab87ed7e2a63eb1a901c4eeac1bb2bcc6",  # 3.18.0
 )
 ```
 
-`commit` takes a full SHA. Use this to track work that has no tag yet. Prefer
-the tag form for anything you ship: it is a fixed archive plus a checksum,
-rather than a repository that has to stay reachable and re-clone.
+`commit` takes a full SHA, not a tag. Pin the commit a release tag points at
+rather than the tag itself: a SHA cannot be moved, and it is the same thing the
+registry will hand you later. `git rev-list -n1 v1.2.0` prints it.
 
-The `version` in `bazel_dep` is still required either way. It is what the module
-reports to the rest of the graph; the override decides what is actually fetched.
+The `version` in `bazel_dep` is still required. It is what the module reports to
+the rest of the graph; the override decides what is actually fetched.
 
 ### Then, in the same `MODULE.bazel`
 
