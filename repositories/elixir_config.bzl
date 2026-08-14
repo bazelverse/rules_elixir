@@ -12,6 +12,11 @@ _ELIXIR_VERSION_UNKNOWN = "UNKNOWN"
 INSTALLATION_TYPE_EXTERNAL = "external"
 INSTALLATION_TYPE_INTERNAL = "internal"
 
+# A precompiled Elixir distribution fetched and staged by the build rather than compiled from
+# source. Hermetic in the same sense as "internal" -- not discovered on the host -- but with no
+# `make` step.
+INSTALLATION_TYPE_PREBUILT = "prebuilt"
+
 def _version_identifier(version_string):
     parts = version_string.split(".", 2)
     if len(parts) > 1:
@@ -50,6 +55,18 @@ def _impl(repository_ctx):
                 Label("//repositories:BUILD_external.tpl"),
                 {
                     "%{ELIXIR_HOME}": props.elixir_home,
+                    "%{ELIXIR_VERSION_ID}": props.identifier,
+                },
+                False,
+            )
+        elif props.type == INSTALLATION_TYPE_PREBUILT:
+            repository_ctx.template(
+                "{}/BUILD.bazel".format(name),
+                Label("//repositories:BUILD_prebuilt.tpl"),
+                {
+                    "%{URL}": props.url,
+                    "%{STRIP_PREFIX}": props.strip_prefix or "",
+                    "%{SHA_256}": props.sha256 or "",
                     "%{ELIXIR_VERSION_ID}": props.identifier,
                 },
                 False,

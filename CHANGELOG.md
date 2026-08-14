@@ -1,5 +1,59 @@
 # Changelog
 
+## 1.3.0
+
+Adds a third way to supply Elixir: an already-compiled distribution.
+
+### Added
+
+- **`prebuilt_elixir_from_http_archive` and `prebuilt_elixir_from_hex_builds`**
+  (`bzlmod/extensions.bzl`, `repositories/elixir_config.bzl`,
+  new `repositories/BUILD_prebuilt.tpl`, new `elixir_prebuilt` in
+  `private/elixir_build.bzl`).
+
+  The mirror of what rules_erlang 3.20.0 added for OTP, and for the same reason:
+  neither existing path can consume a downloadable prebuilt.
+  `external_elixir_from_path` needs an `elixir_home` that already exists on the
+  machine running the action, and `internal_elixir_from_http_archive` always feeds
+  its URL to `elixir_build`, which runs `make`.
+
+  `elixir_build` extracts a source archive, runs `make`, and copies the resulting
+  `bin/` and `lib/` into the release directory. A precompiled distribution *is*
+  those two directories, so staging one is extraction plus the same validation
+  step -- run `iex --version` and record what it reports.
+
+  ```python
+  elixir_config_ext.prebuilt_elixir_from_hex_builds(
+      name = "elixir_1_19_4",
+      version = "1.19.4",
+      otp_major = "28",
+      sha256 = "8fd7b5705b756c0e1ec71f9e8281b4b75801b9564f0205b5035319e8505ad2b4",
+  )
+  ```
+
+  **Unlike OTP, no relocation step is needed.** An OTP installation bakes ROOTDIR
+  into its start scripts and ships an `Install` script to repoint it; Elixir's
+  launchers resolve their own root relative to `argv[0]`, so a precompiled
+  distribution works from wherever it is unpacked.
+
+  **Also unlike OTP, one archive serves every platform.** Elixir compiles to BEAM
+  bytecode, which is architecture-independent -- the published archive contains no
+  native objects -- which is why `prebuilt_elixir_from_hex_builds` takes an
+  `otp_major` rather than an `arch`/`os` pair, and why there is no
+  `exec_compatible_with` attribute here.
+
+  The rule accepts both zip and tar archives, because hex.pm publishes a zip while
+  other distributions are tarballs, and GNU tar cannot read zip. It fails with an
+  explicit message when `unzip` is absent for a zip input, and when the extracted
+  archive has no `bin/` and `lib/` -- the likely mistake being an Elixir *source*
+  archive, whose failure would otherwise surface as a confusing missing-file error
+  after extraction.
+
+  As with the OTP change, a prebuilt installation registers under the existing
+  `:elixir_internal` constraint and keeps the `:elixir_build` target name, so
+  moving a repository between the source and prebuilt paths is a `MODULE.bazel`
+  edit and nothing else.
+
 ## 1.2.0
 
 First release from <https://github.com/bazelverse/rules_elixir>.

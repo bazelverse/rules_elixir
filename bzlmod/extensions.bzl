@@ -3,6 +3,7 @@ load(
     "//repositories:elixir_config.bzl",
     "INSTALLATION_TYPE_EXTERNAL",
     "INSTALLATION_TYPE_INTERNAL",
+    "INSTALLATION_TYPE_PREBUILT",
     _elixir_config_rule = "elixir_config",
 )
 
@@ -42,6 +43,30 @@ def _elixir_config(ctx):
             strip_prefixs[elixir.name] = strip_prefix
             sha256s[elixir.name] = elixir.sha256
 
+        for elixir in mod.tags.prebuilt_elixir_from_http_archive:
+            types[elixir.name] = INSTALLATION_TYPE_PREBUILT
+            versions[elixir.name] = elixir.version
+            urls[elixir.name] = elixir.url
+            strip_prefixs[elixir.name] = elixir.strip_prefix
+            sha256s[elixir.name] = elixir.sha256
+
+        for elixir in mod.tags.prebuilt_elixir_from_hex_builds:
+            # Elixir compiles to BEAM bytecode, which is architecture-independent, so unlike the
+            # OTP builds hex.pm publishes there is no architecture in this path -- one archive
+            # serves every platform. The sha256 is listed alongside the build in builds.txt.
+            url = "https://builds.hex.pm/builds/elixir/v{}-otp-{}.zip".format(
+                elixir.version,
+                elixir.otp_major,
+            )
+
+            types[elixir.name] = INSTALLATION_TYPE_PREBUILT
+            versions[elixir.name] = elixir.version
+            urls[elixir.name] = url
+
+            # The archive has no wrapping directory: bin/ and lib/ are at its root.
+            strip_prefixs[elixir.name] = ""
+            sha256s[elixir.name] = elixir.sha256
+
     _elixir_config_rule(
         name = "elixir_config",
         types = types,
@@ -78,12 +103,35 @@ internal_elixir_from_github_release = tag_class(attrs = {
     ),
 })
 
+# Any PRECOMPILED Elixir distribution -- an archive whose root holds bin/ and lib/ -- as
+# opposed to an Elixir source archive, which has to be built.
+prebuilt_elixir_from_http_archive = tag_class(attrs = {
+    "name": attr.string(),
+    "version": attr.string(),
+    "url": attr.string(),
+    "strip_prefix": attr.string(),
+    "sha256": attr.string(),
+})
+
+# Convenience wrapper over builds.hex.pm. Elixir is architecture-independent bytecode, so a
+# single archive serves every platform and only the OTP major it was built against varies.
+prebuilt_elixir_from_hex_builds = tag_class(attrs = {
+    "name": attr.string(),
+    "version": attr.string(),
+    "otp_major": attr.string(
+        doc = "Major OTP version the build targets, e.g. \"28\" for v1.19.4-otp-28.",
+    ),
+    "sha256": attr.string(),
+})
+
 elixir_config = module_extension(
     implementation = _elixir_config,
     tag_classes = {
         "external_elixir_from_path": external_elixir_from_path,
         "internal_elixir_from_http_archive": internal_elixir_from_http_archive,
         "internal_elixir_from_github_release": internal_elixir_from_github_release,
+        "prebuilt_elixir_from_http_archive": prebuilt_elixir_from_http_archive,
+        "prebuilt_elixir_from_hex_builds": prebuilt_elixir_from_hex_builds,
     },
 )
 

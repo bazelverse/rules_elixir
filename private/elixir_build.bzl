@@ -158,6 +158,154 @@ elixir_build = rule(
     toolchains = ["@rules_erlang//tools:toolchain_type"],
 )
 
+def _elixir_prebuilt_impl(ctx):
+    """Stage an already-compiled Elixir instead of building one.
+
+    Same output contract as elixir_build -- a release_dir holding bin/ and lib/, plus a
+    version_file -- so the toolchain cannot tell the two apart. What differs is that no `make`
+    runs: a precompiled Elixir distribution already contains exactly the bin/ and lib/ trees
+    that elixir_build copies out of its build directory.
+
+    Elixir needs no relocation step, unlike OTP. Its launcher scripts resolve their own root
+    relative to argv[0], so a precompiled distribution works from wherever it is unpacked.
+    """
+    (_, _, filename) = ctx.attr.url.rpartition("/")
+    downloaded_archive = ctx.actions.declare_file(filename)
+
+    release_dir = ctx.actions.declare_directory(ctx.label.name + "_release")
+    version_file = ctx.actions.declare_file(ctx.label.name + "_version")
+
+    ctx.actions.run_shell(
+        inputs = [],
+        outputs = [downloaded_archive],
+        command = """set -euo pipefail
+
+curl -L "{archive_url}" -o {archive_path}
+""".format(
+            archive_url = ctx.attr.url,
+            archive_path = downloaded_archive.path,
+        ),
+        mnemonic = "CURL",
+        progress_message = "Downloading {}".format(ctx.attr.url),
+    )
+
+    sha256file = sha256(ctx, downloaded_archive)
+
+    strip_components = "--strip-components=1" if ctx.attr.strip_prefix != "" else ""
+
+    ctx.actions.run_shell(
+        inputs = [downloaded_archive, sha256file],
+        outputs = [release_dir],
+        command = """set -euo pipefail
+
+if [ -n "{sha256}" ]; then
+    if [ "{sha256}" != "$(cat "{sha256file}")" ]; then
+        echo "ERROR: Checksum mismatch. $(basename "{archive_path}") $(cat "{sha256file}") != {sha256}"
+        exit 1
+    fi
+fi
+
+ABS_ARCHIVE=$PWD/{archive_path}
+ABS_RELEASE_DIR=$PWD/{release_path}
+ABS_STAGE_DIR="$(mktemp -d)"
+
+cd "$ABS_STAGE_DIR"
+
+# hex.pm publishes Elixir as a zip; a tarball is accepted too so this rule is not tied to one
+# publisher. GNU tar cannot read zip archives, so the two cases cannot share a command.
+case "$ABS_ARCHIVE" in
+    *.zip)
+        if ! command -v unzip >/dev/null 2>&1; then
+            echo "ERROR: unzip is required to stage a zipped Elixir distribution but is not"
+            echo "       on PATH. Install it in the execution environment, or point this rule"
+            echo "       at a .tar.gz distribution instead."
+            exit 1
+        fi
+        unzip -q "$ABS_ARCHIVE"
+        ;;
+    *)
+        tar --extract {strip_components} --file "$ABS_ARCHIVE"
+        ;;
+esac
+
+if [ ! -d bin ] || [ ! -d lib ]; then
+    echo "ERROR: $(pwd) has no bin/ and lib/ after extraction."
+    echo "       elixir_prebuilt expects a PRECOMPILED Elixir distribution (the layout"
+    echo "       published at builds.hex.pm), not an Elixir source archive -- a source"
+    echo "       archive has to be built, so use elixir_build for that."
+    exit 1
+fi
+
+# zip does not always carry the executable bit through, and every launcher in bin/ needs it.
+chmod +x bin/* 2>/dev/null || true
+
+cp -r bin "$ABS_RELEASE_DIR"/
+cp -r lib "$ABS_RELEASE_DIR"/
+""".format(
+            sha256 = ctx.attr.sha256v,
+            sha256file = sha256file.path,
+            archive_path = downloaded_archive.path,
+            strip_components = strip_components,
+            release_path = release_dir.path,
+        ),
+        use_default_shell_env = True,
+        mnemonic = "ELIXIR",
+        progress_message = "Staging prebuilt elixir",
+    )
+
+    (erlang_home, _, runfiles) = erlang_dirs(ctx)
+
+    # Identical validation to elixir_build: run the thing and ask it its version, rather than
+    # trusting the archive to be what it claims.
+    ctx.actions.run_shell(
+        inputs = depset(
+            direct = [release_dir],
+            transitive = [runfiles.files],
+        ),
+        outputs = [version_file],
+        command = """set -euo pipefail
+
+{maybe_install_erlang}
+
+export PATH="{erlang_home}"/bin:${{PATH}}
+
+"{elixir_home}"/bin/iex --version > {version_file}
+""".format(
+            maybe_install_erlang = maybe_install_erlang(ctx),
+            erlang_home = erlang_home,
+            elixir_home = release_dir.path,
+            version_file = version_file.path,
+        ),
+        mnemonic = "ELIXIR",
+        progress_message = "Validating prebuilt elixir at {}".format(release_dir.path),
+    )
+
+    return [
+        DefaultInfo(
+            files = depset([
+                release_dir,
+                version_file,
+            ]),
+        ),
+        ctx.toolchains["@rules_erlang//tools:toolchain_type"].otpinfo,
+        ElixirInfo(
+            release_dir = release_dir,
+            elixir_home = None,
+            version_file = version_file,
+        ),
+    ]
+
+elixir_prebuilt = rule(
+    implementation = _elixir_prebuilt_impl,
+    attrs = {
+        "url": attr.string(mandatory = True),
+        "strip_prefix": attr.string(),
+        "sha256v": attr.string(),
+        "sha256": tools["sha256"],
+    },
+    toolchains = ["@rules_erlang//tools:toolchain_type"],
+)
+
 def _elixir_external_impl(ctx):
     elixir_home = ctx.attr.elixir_home
     if elixir_home == "":
