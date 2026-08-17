@@ -9,6 +9,17 @@ load(
     "erlang_preamble",
 )
 
+# A TreeArtifact's members do not exist at analysis time, so a directory is expanded at
+# execution time instead. Sorted, so the command is deterministic and the action cacheable.
+def _src_args(srcs):
+    args = []
+    for f in srcs:
+        if f.is_directory:
+            args.append('$(find "{}" -name "*.ex" | sort)'.format(f.path))
+        else:
+            args.append(f.path)
+    return " ".join(args)
+
 def _impl(ctx):
     ebin = ctx.actions.declare_directory(ctx.attr.dest)
 
@@ -72,7 +83,7 @@ ${{ABS_ELIXIR_HOME}}/bin/elixirc \\
         setup = ctx.attr.setup,
         out_dir = ebin.path,
         elixirc_opts = " ".join([shell.quote(opt) for opt in ctx.attr.elixirc_opts]),
-        srcs = " ".join([f.path for f in ctx.files.srcs]),
+        srcs = _src_args(ctx.files.srcs),
     )
 
     inputs = depset(
@@ -104,8 +115,10 @@ ${{ABS_ELIXIR_HOME}}/bin/elixirc \\
 elixir_bytecode = rule(
     implementation = _impl,
     attrs = {
+        # allow_files = True, not [".ex"]: codegen hands this a TreeArtifact whose contents
+        # are not known at analysis time. See _src_args.
         "srcs": attr.label_list(
-            allow_files = [".ex"],
+            allow_files = True,
         ),
         "data": attr.label_list(allow_files = True),
         "elixirc_opts": attr.string_list(),

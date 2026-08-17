@@ -20,3 +20,10 @@ toolchain_type(
     name = "mix_payloads_toolchain_type",
     visibility = ["//visibility:public"],
 )
+
+# protoc plus the protoc-gen-elixir plugin. The plugin is built from the protobuf Hex package,
+# whose repository name only the consumer knows, so it is resolved rather than defaulted.
+toolchain_type(
+    name = "elixir_proto_toolchain_type",
+    visibility = ["//visibility:public"],
+)
