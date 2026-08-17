@@ -2,7 +2,7 @@ load(
     ":elixir_toolchain.bzl",
     "elixir_dirs",
     "erlang_dirs",
-    "maybe_install_erlang",
+    "erlang_preamble",
 )
 
 def _impl(ctx):
@@ -15,18 +15,18 @@ def _impl(ctx):
     (elixir_home, elixir_runfiles) = elixir_dirs(ctx)
 
     script = """set -euo pipefail
-{maybe_install_erlang}
+{erlang_preamble}
 if [[ "{elixir_home}" == /* ]]; then
     ABS_ELIXIR_HOME="{elixir_home}"
 else
     ABS_ELIXIR_HOME=$PWD/{elixir_home}
 fi
-export PATH="$ABS_ELIXIR_HOME"/bin:"{erlang_home}"/bin:${{PATH}}
+export PATH="$ABS_ELIXIR_HOME"/bin:"$ABS_ERLANG_HOME"/bin:${{PATH}}
 export SRCS="{srcs}"
 export OUTS="{outs}"
 ${{ABS_ELIXIR_HOME}}/bin/iex --eval "$1"
 """.format(
-        maybe_install_erlang = maybe_install_erlang(ctx),
+        erlang_preamble = erlang_preamble(ctx),
         erlang_home = erlang_home,
         elixir_home = elixir_home,
         srcs = ctx.configuration.host_path_separator.join([src.path for src in ctx.files.srcs]),

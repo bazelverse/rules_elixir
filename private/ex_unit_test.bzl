@@ -16,7 +16,7 @@ load(
     "//private:elixir_toolchain.bzl",
     "elixir_dirs",
     "erlang_dirs",
-    "maybe_install_erlang",
+    "erlang_preamble",
 )
 
 def _package_relative_path(ctx, p):
@@ -83,13 +83,13 @@ def _impl(ctx):
 #!/usr/bin/env bash
 set -eo pipefail
 
-{maybe_install_erlang}
+{erlang_preamble}
 if [[ "{elixir_home}" == /* ]]; then
     ABS_ELIXIR_HOME="{elixir_home}"
 else
     ABS_ELIXIR_HOME=$PWD/{elixir_home}
 fi
-export PATH="$ABS_ELIXIR_HOME"/bin:"{erlang_home}"/bin:${{PATH}}
+export PATH="$ABS_ELIXIR_HOME"/bin:"$ABS_ERLANG_HOME"/bin:${{PATH}}
 
 {copy_srcs_and_data_commands}
 
@@ -132,7 +132,7 @@ if printf '%s\n' "$summary" | grep -Eq "Result: 0 tests|(^|[^0-9])0 tests," &&
 fi
 rm test.log
 """.format(
-            maybe_install_erlang = maybe_install_erlang(ctx, short_path = True),
+            erlang_preamble = erlang_preamble(ctx, short_path = True),
             erlang_home = erlang_home,
             elixir_home = elixir_home,
             copy_srcs_and_data_commands = "\n".join(copy_srcs_and_data_commands),

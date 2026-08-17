@@ -10,7 +10,7 @@ load(
 load(
     "@rules_erlang//tools:erlang_toolchain.bzl",
     "erlang_dirs",
-    "maybe_install_erlang",
+    "erlang_preamble",
 )
 
 ElixirInfo = provider(
@@ -71,9 +71,9 @@ if [ -n "{sha256}" ]; then
     fi
 fi
 
-{maybe_install_erlang}
+{erlang_preamble}
 
-export PATH="{erlang_home}"/bin:${{PATH}}
+export PATH="$ABS_ERLANG_HOME"/bin:${{PATH}}
 
 ABS_BUILD_DIR="$(mktemp -d)"
 ABS_RELEASE_DIR=$PWD/{release_path}
@@ -96,7 +96,7 @@ cp -r lib $ABS_RELEASE_DIR/
 """.format(
             sha256 = ctx.attr.sha256v,
             sha256file = sha256file.path,
-            maybe_install_erlang = maybe_install_erlang(ctx),
+            erlang_preamble = erlang_preamble(ctx),
             erlang_home = erlang_home,
             archive_path = downloaded_archive.path,
             strip_components = strip_components,
@@ -117,13 +117,13 @@ cp -r lib $ABS_RELEASE_DIR/
         outputs = [version_file],
         command = """set -euo pipefail
 
-{maybe_install_erlang}
+{erlang_preamble}
 
-export PATH="{erlang_home}"/bin:${{PATH}}
+export PATH="$ABS_ERLANG_HOME"/bin:${{PATH}}
 
 "{elixir_home}"/bin/iex --version > {version_file}
 """.format(
-            maybe_install_erlang = maybe_install_erlang(ctx),
+            erlang_preamble = erlang_preamble(ctx),
             erlang_home = erlang_home,
             elixir_home = release_dir.path,
             version_file = version_file.path,
@@ -207,9 +207,8 @@ fi
 
 ABS_ARCHIVE=$PWD/{archive_path}
 ABS_RELEASE_DIR=$PWD/{release_path}
-ABS_STAGE_DIR="$(mktemp -d)"
 
-cd "$ABS_STAGE_DIR"
+cd "$ABS_RELEASE_DIR"
 
 # hex.pm publishes Elixir as a zip; a tarball is accepted too so this rule is not tied to one
 # publisher. GNU tar cannot read zip archives, so the two cases cannot share a command.
@@ -238,9 +237,6 @@ fi
 
 # zip does not always carry the executable bit through, and every launcher in bin/ needs it.
 chmod +x bin/* 2>/dev/null || true
-
-cp -r bin "$ABS_RELEASE_DIR"/
-cp -r lib "$ABS_RELEASE_DIR"/
 """.format(
             sha256 = ctx.attr.sha256v,
             sha256file = sha256file.path,
@@ -265,13 +261,13 @@ cp -r lib "$ABS_RELEASE_DIR"/
         outputs = [version_file],
         command = """set -euo pipefail
 
-{maybe_install_erlang}
+{erlang_preamble}
 
-export PATH="{erlang_home}"/bin:${{PATH}}
+export PATH="$ABS_ERLANG_HOME"/bin:${{PATH}}
 
 "{elixir_home}"/bin/iex --version > {version_file}
 """.format(
-            maybe_install_erlang = maybe_install_erlang(ctx),
+            erlang_preamble = erlang_preamble(ctx),
             erlang_home = erlang_home,
             elixir_home = release_dir.path,
             version_file = version_file.path,
@@ -320,13 +316,13 @@ def _elixir_external_impl(ctx):
         outputs = [version_file],
         command = """set -euo pipefail
 
-{maybe_install_erlang}
+{erlang_preamble}
 
-export PATH="{erlang_home}"/bin:${{PATH}}
+export PATH="$ABS_ERLANG_HOME"/bin:${{PATH}}
 
 "{elixir_home}"/bin/iex --version > {version_file}
 """.format(
-            maybe_install_erlang = maybe_install_erlang(ctx),
+            erlang_preamble = erlang_preamble(ctx),
             erlang_home = erlang_home,
             elixir_home = elixir_home,
             version_file = version_file.path,

@@ -46,7 +46,7 @@ load(
     ":elixir_toolchain.bzl",
     "elixir_dirs",
     "erlang_dirs",
-    "maybe_install_erlang",
+    "erlang_preamble",
 )
 
 def _impl(ctx):
@@ -95,7 +95,7 @@ def _impl(ctx):
 
     script = """set -euo pipefail
 
-{maybe_install_erlang}
+{erlang_preamble}
 
 if [ -n "{erl_libs_path}" ]; then
     export ERL_LIBS=$PWD/{erl_libs_path}
@@ -109,7 +109,7 @@ fi
 
 ABS_OUT_PATH="$PWD/{out}"
 
-export PATH="$ABS_ELIXIR_HOME"/bin:"{erlang_home}"/bin:${{PATH}}
+export PATH="$ABS_ELIXIR_HOME"/bin:"$ABS_ERLANG_HOME"/bin:${{PATH}}
 
 export LANG="en_US.UTF-8"
 export LC_ALL="en_US.UTF-8"
@@ -154,7 +154,7 @@ fi
 # rejects dangling symlinks in a declared output tree.
 find . -type l -delete
 """.format(
-        maybe_install_erlang = maybe_install_erlang(ctx),
+        erlang_preamble = erlang_preamble(ctx),
         erl_libs_path = erl_libs_path,
         erlang_home = erlang_home,
         elixir_home = elixir_home,

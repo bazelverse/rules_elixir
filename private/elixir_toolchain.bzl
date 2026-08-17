@@ -28,18 +28,23 @@ elixir_toolchain = rule(
 def _build_info(ctx):
     return ctx.toolchains["//:toolchain_type"].otpinfo
 
-def erlang_dirs(ctx):
+# Mirrors @rules_erlang//tools:erlang_toolchain.bzl, resolved against the Elixir toolchain
+# type, which carries the OtpInfo the Elixir distribution was built against.
+def erlang_dirs(ctx, short_path = False):
     info = _build_info(ctx)
-    if info.release_dir_tar != None:
+    erlang_home = info.erlang_home
+    if info.release_dir != None:
         runfiles = ctx.runfiles([
-            info.release_dir_tar,
+            info.release_dir,
             info.version_file,
         ])
+        if short_path:
+            erlang_home = info.release_dir.short_path + erlang_home[len(info.release_dir.path):]
     else:
         runfiles = ctx.runfiles([
             info.version_file,
         ])
-    return (info.erlang_home, info.release_dir_tar, runfiles)
+    return (erlang_home, info.release_dir, runfiles)
 
 def elixir_dirs(ctx, short_path = False):
     info = ctx.toolchains["//:toolchain_type"].elixirinfo
@@ -49,20 +54,13 @@ def elixir_dirs(ctx, short_path = False):
         p = info.release_dir.short_path if short_path else info.release_dir.path
         return (p, ctx.runfiles([info.release_dir, info.version_file]))
 
-def maybe_install_erlang(ctx, short_path = False):
-    info = _build_info(ctx)
-    release_dir_tar = info.release_dir_tar
-    if release_dir_tar == None:
-        return ""
-    else:
-        return """\
-mkdir -p $(dirname "{install_path}")
-if mkdir "{install_path}"; then
-    tar --extract \\
-        --directory "{install_path}" \\
-        --file {release_tar}
+def erlang_preamble(ctx, short_path = False):
+    """Shell defining $ABS_ERLANG_HOME. Emit before any use of the OTP tree."""
+    (erlang_home, _, _) = erlang_dirs(ctx, short_path = short_path)
+    return """\
+if [[ "{erlang_home}" == /* ]]; then
+    ABS_ERLANG_HOME="{erlang_home}"
+else
+    ABS_ERLANG_HOME="$PWD/{erlang_home}"
 fi\
-""".format(
-            release_tar = release_dir_tar.short_path if short_path else release_dir_tar.path,
-            install_path = info.install_path,
-        )
+""".format(erlang_home = erlang_home)
