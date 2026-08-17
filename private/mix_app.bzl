@@ -662,7 +662,7 @@ def _impl(ctx):
         # rather than hardcoding a stdlib choice. Static, so the NIF is self-contained -- the
         # runtime images carry no libc++.
         if _compiles_cxx(ctx):
-            archives = " ".join([_abs(f.path) for f in ctx.files._cxx_static_runtime])
+            archives = " ".join([_abs(f.path) for f in ctx.files.cxx_static_runtime])
             if archives:
                 ldflags += " -Wl,--whole-archive {} -Wl,--no-whole-archive".format(archives)
 
@@ -684,7 +684,7 @@ def _impl(ctx):
         ])
         cc_inputs = [
             cc_toolchain.all_files,
-            depset(ctx.files._cxx_static_runtime),
+            depset(ctx.files.cxx_static_runtime),
             depset([ctx.file._check_undefined_cxx]),
         ]
 
@@ -1270,14 +1270,14 @@ mix_app = rule(
         # package actually depends on bundlex, so this costs nothing for the other 271.
         "precompiled_os_deps": attr.label_list(
             allow_files = True,
-            default = ["//third_party/membrane:precompiled_os_deps"],
+            default = [],
         ),
         # Precompiled Rustler NIF archives, so rustler_precompiled finds its artefact in a
         # declared input instead of fetching it. Staged for every package; the ones that
         # use no precompiled NIF never look. See //third_party/precompiled_nifs.
         "precompiled_nifs": attr.label_list(
             allow_files = True,
-            default = ["//third_party/precompiled_nifs:precompiled_nifs"],
+            default = [],
         ),
         # A target-architecture OpenSSL, extracted only for _OPENSSL_APPS. It is an
         # attribute rather than a hardcoded label so a caller can point a package at a
@@ -1286,15 +1286,15 @@ mix_app = rule(
         # target's. Only _HOST_NIF_APPS stage either. See //third_party/precompiled_nifs.
         "elixir_make_nifs": attr.label_list(
             allow_files = True,
-            default = ["//third_party/precompiled_nifs:elixir_make_nifs"],
+            default = [],
         ),
         "elixir_make_nifs_target": attr.label_list(
             allow_files = True,
-            default = ["//third_party/precompiled_nifs:elixir_make_nifs_target"],
+            default = [],
         ),
         "openssl_sysroot": attr.label(
             allow_single_file = True,
-            default = "//third_party/openssl:sysroot_tar",
+            default = None,
         ),
         "mix_env": attr.string(default = "prod"),
         "deps": attr.label_list(providers = [ErlangAppInfo]),
@@ -1302,17 +1302,20 @@ mix_app = rule(
         # native that has C++ sources. See the --whole-archive block in _impl.
         "_check_undefined_cxx": attr.label(
             allow_single_file = True,
-            default = "//build:check_undefined_cxx.py",
+            default = Label("//private:check_undefined_cxx.py"),
         ),
-        "_cxx_static_runtime": attr.label(
+        # The C++ static runtime a NIF links when it compiles C++. No default: a ruleset
+        # cannot name the consumer's toolchain repository, and a NIF that links no C++
+        # runtime builds clean and then fails dlopen on the first unresolved symbol.
+        "cxx_static_runtime": attr.label(
             allow_files = True,
-            default = "@llvm//runtimes/cxxstdlib:static_runtime_lib",
+            default = None,
         ),
         # Read only to answer "what CPU is this build FOR". See _target_triple_env.
         "_cpu_aarch64": attr.label(default = "@platforms//cpu:aarch64"),
         "_os_linux": attr.label(default = "@platforms//os:linux"),
     },
     provides = [ErlangAppInfo],
-    toolchains = ["@rules_elixir//:toolchain_type"] + use_cc_toolchain(),
+    toolchains = ["//:toolchain_type"] + use_cc_toolchain(),
     fragments = ["cpp"],
 )

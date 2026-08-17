@@ -46,6 +46,11 @@ defmodule GenHexBazel do
     # Without this the edge is silently dropped and the dependent fails with "module X is not
     # loaded", which reads as a missing dependency rather than a shadowed one.
     path_deps: %{},
+    # Extra `load()` lines and extra attribute lines spliced into every Mix stub. This is how a
+    # repository injects `extra_config = HEX_COMPILE_ENV_CONFIG`: the compile_env invariant is
+    # general, but which keys matter is not.
+    extra_loads: [],
+    extra_attrs: [],
     mix_template: nil,
     erlang_template: nil
   ]
@@ -75,6 +80,8 @@ defmodule GenHexBazel do
       skip: Map.get(raw, "skip", %{}),
       drop_edges: Map.get(raw, "drop_edges", %{}),
       path_deps: Map.get(raw, "path_deps", %{}),
+      extra_loads: Map.get(raw, "extra_loads", []),
+      extra_attrs: Map.get(raw, "extra_attrs", []),
       mix_template: read_template(raw, "mix_template"),
       erlang_template: read_template(raw, "erlang_template")
     }
@@ -258,10 +265,26 @@ defmodule GenHexBazel do
       |> String.replace("{app_target}", config.app_target)
       |> String.replace("{generated_by}", config.generated_by)
       |> String.replace("{tools}", inspect(entry.tools))
+      |> String.replace("{extra_loads}", render_extra_loads(config))
+      |> String.replace("{extra_attrs}", render_extra_attrs(config))
       |> String.replace("{deps_attr}", deps_attr)
       |> String.replace("{deps}", deps_lines)
 
     write(config, "#{entry.name}.BUILD", body)
+  end
+
+  defp render_extra_loads(%{extra_loads: []}), do: ""
+
+  defp render_extra_loads(%{extra_loads: loads}) do
+    Enum.map_join(loads, "", fn %{"bzl" => bzl, "symbols" => symbols} ->
+      ~s|load("#{bzl}", #{Enum.map_join(symbols, ", ", &~s|"#{&1}"|)})\n|
+    end)
+  end
+
+  defp render_extra_attrs(%{extra_attrs: []}), do: ""
+
+  defp render_extra_attrs(%{extra_attrs: attrs}) do
+    Enum.map_join(attrs, "", fn line -> "\n    #{line}" end)
   end
 
   # The closure as data, for the caller's module extension to hand to hex_packages_extension.

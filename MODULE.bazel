@@ -21,6 +21,16 @@ bazel_dep(
     version = "3.18.0",
 )
 
+# mix_app cross-compiles NIFs, so it resolves a cc toolchain and reads the flags out of it.
+bazel_dep(
+    name = "rules_cc",
+    version = "0.2.22",
+)
+bazel_dep(
+    name = "rules_foreign_cc",
+    version = "0.15.1",
+)
+
 # rules_erlang 3.18.0 is not on the Bazel Central Registry yet; ownership of the
 # registry entry is being transferred from rabbitmq. Until that lands the
 # bazel_dep above cannot resolve on its own, and every module in the graph that
