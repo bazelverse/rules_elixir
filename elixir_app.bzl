@@ -8,6 +8,8 @@ def elixir_app(
         app_name = None,
         extra_apps = [],
         srcs = None,
+        hdrs = None,
+        priv = None,
         data = [],
         elixirc_opts = [],
         ez_deps = [],
@@ -20,6 +22,11 @@ def elixir_app(
       extra_apps: additional apps (elixir is always included) injected into
           the .app file
       srcs: Sources. Defaults to "lib/**/*.ex"
+      hdrs: Erlang headers. Defaults to "include/**/*.hrl"
+      priv: Runtime files carried on ErlangAppInfo. Defaults to "priv/**/*".
+          NIFs reach the runtime as priv/native/*.so, so an app with a NIF is
+          broken by passing [] here.
+      data: files read at COMPILE time -- @external_resource and friends
       elixirc_opts: elixirc options
       ez_deps: Dependencies that are .ez files
       deps: ErlangAppInfo labels
@@ -33,6 +40,10 @@ def elixir_app(
         srcs = native.glob([
             "lib/**/*.ex",
         ])
+    if hdrs == None:
+        hdrs = native.glob(["include/**/*.hrl"], allow_empty = True)
+    if priv == None:
+        priv = native.glob(["priv/**/*"], allow_empty = True)
 
     elixir_bytecode(
         name = "beam_files",
@@ -70,7 +81,7 @@ def elixir_app(
     erlang_app_info(
         name = "erlang_app",
         srcs = srcs,
-        hdrs = [],
+        hdrs = hdrs,
         app_name = app_name,
         beam = [":ebin"],
         extra_apps = extra_apps,
@@ -78,7 +89,7 @@ def elixir_app(
         # with --incompatible_disallow_empty_glob on -- the default since Bazel 7 -- an
         # empty glob is a hard error, so those packages could not be built at all.
         license_files = native.glob(["LICENSE*"], allow_empty = True),
-        priv = [],
+        priv = priv,
         visibility = ["//visibility:public"],
         deps = [
             ":elixir_without_app_overlap",
