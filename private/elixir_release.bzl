@@ -32,6 +32,7 @@ which is why this rule has no `native_libs` and needs no `skip_compilation?` con
 patching: Rustler is never invoked.
 """
 
+load("//private:mix_payloads.bzl", "EMPTY_PAYLOADS")
 load("@bazel_skylib//lib:shell.bzl", "shell")
 load(
     "//private:elixir_toolchain.bzl",
@@ -95,6 +96,12 @@ for size, paths in by_size.items():
 print("dedupe: %d files -> symlinks, %.0f MB saved" % (links, saved / 1048576))
 __DEDUPE__
 """
+
+_PAYLOADS_TOOLCHAIN = "//:mix_payloads_toolchain_type"
+
+def _payloads(ctx):
+    toolchain = ctx.toolchains[_PAYLOADS_TOOLCHAIN]
+    return toolchain.payloads if toolchain else EMPTY_PAYLOADS
 
 def _impl(ctx):
     (erlang_home, _, erlang_runfiles) = erlang_dirs(ctx)
@@ -384,7 +391,7 @@ tar -czf "$EXECROOT/{tar_out}" --owner=10001 --group=10001 -C "$PACKAGED" .
         elixir_home = elixir_home,
         erl_libs_path = erl_libs_path,
         copy_srcs_commands = "\n".join(copy_srcs_commands),
-        archives = " ".join([shell.quote(a.path) for a in ctx.files.archives]),
+        archives = " ".join([shell.quote(a.path) for a in _payloads(ctx).archives]),
         extra_config = extra_config_cmds,
         overlays = "\n".join(overlay_cmds),
         project_dir = ctx.label.package,
@@ -399,7 +406,7 @@ tar -czf "$EXECROOT/{tar_out}" --owner=10001 --group=10001 -C "$PACKAGED" .
     )
 
     inputs = depset(
-        direct = ctx.files.srcs + ctx.files.archives + erl_libs_files + overlay_files + erts_inputs,
+        direct = ctx.files.srcs + _payloads(ctx).archives + erl_libs_files + overlay_files + erts_inputs,
         transitive = [
             erlang_runfiles.files,
             elixir_runfiles.files,
@@ -426,13 +433,6 @@ elixir_release = rule(
         # The release recipe only: mix.exs, config/**, rel/**, plus each path dep's
         # mix.exs. Never lib/ -- compiled code arrives through `app`.
         "srcs": attr.label_list(allow_files = True),
-        "archives": attr.label_list(
-            allow_files = [".ez"],
-            # No default: a ruleset cannot name the consumer's repositories. Mix refuses to
-            # resolve a project without Hex installed as an archive, aborting with "Could not
-            # find an SCM for dependency" even for a dev-only dep nothing would compile.
-            default = [],
-        ),
         # Tarballs of generated, non-compiled content, keyed by target with the
         # destination relative to the release application's own directory. A Phoenix app
         # passes {"//elixir/web-ng/assets:static": "priv"} so the digested asset tree
@@ -454,5 +454,6 @@ elixir_release = rule(
     },
     toolchains = [
         "//:toolchain_type",
+        config_common.toolchain_type(_PAYLOADS_TOOLCHAIN, mandatory = False),
     ],
 )
