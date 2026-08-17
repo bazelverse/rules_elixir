@@ -34,6 +34,7 @@ project dropped Bazel in March 2025. Two deliberate departures from upstream:
     that a dependent's `-include_lib("app/include/foo.hrl")` resolves.
 """
 
+load("//private:mix_payloads.bzl", "MixPayloadsInfo")
 load("@bazel_skylib//lib:shell.bzl", "shell")
 load("@rules_cc//cc:action_names.bzl", "ACTION_NAMES")
 load("@rules_cc//cc:find_cc_toolchain.bzl", "find_cc_toolchain", "use_cc_toolchain")
@@ -332,7 +333,7 @@ tar -xf "$ORIGINAL_DIR/{tar}" -C "$PWD/.openssl_sysroot"
 export PKG_CONFIG_LIBDIR="$PWD/.openssl_sysroot/usr/lib/{triple}/pkgconfig"
 export PKG_CONFIG_SYSROOT_DIR="$PWD/.openssl_sysroot"
 """.format(
-        tar = ctx.file.openssl_sysroot.path,
+        tar = _payloads(ctx).openssl_sysroot.path,
         triple = triple,
     )
 
@@ -359,7 +360,7 @@ def _host_nif_overlay(ctx):
 
     return "\n".join([
         'tar -xzf "$ORIGINAL_DIR/{}" -C "$ABS_PRIV"'.format(f.path)
-        for f in ctx.files.elixir_make_nifs_target
+        for f in _payloads(ctx).elixir_make_nifs_target
     ])
 
 # Fail the build if a compiled NIF left C++ symbols that nothing can resolve.
@@ -388,6 +389,9 @@ def _compiles_native_code(ctx):
         if f.basename in _NATIVE_BUILD_FILES or f.basename.startswith("Makefile."):
             return True
     return False
+
+def _payloads(ctx):
+    return ctx.attr._payloads[MixPayloadsInfo]
 
 def _impl(ctx):
     (erlang_home, _, erlang_runfiles) = erlang_dirs(ctx)
@@ -662,7 +666,7 @@ def _impl(ctx):
         # rather than hardcoding a stdlib choice. Static, so the NIF is self-contained -- the
         # runtime images carry no libc++.
         if _compiles_cxx(ctx):
-            archives = " ".join([_abs(f.path) for f in ctx.files.cxx_static_runtime])
+            archives = " ".join([_abs(f.path) for f in _payloads(ctx).cxx_static_runtime])
             if archives:
                 ldflags += " -Wl,--whole-archive {} -Wl,--no-whole-archive".format(archives)
 
@@ -684,7 +688,7 @@ def _impl(ctx):
         ])
         cc_inputs = [
             cc_toolchain.all_files,
-            depset(ctx.files.cxx_static_runtime),
+            depset(_payloads(ctx).cxx_static_runtime),
             depset([ctx.file._check_undefined_cxx]),
         ]
 
@@ -835,9 +839,9 @@ def _impl(ctx):
     # pointing BUNDLEX_LOCAL_PRECOMPILED_DIR at the directory makes the patched Bundlex in
     # //third_party/patches/bundlex copy instead of download. Matching is by URL basename.
     precompiled_commands = []
-    if uses_bundlex and ctx.files.precompiled_os_deps:
+    if uses_bundlex and _payloads(ctx).precompiled_os_deps:
         precompiled_commands.append('mkdir -p "${MIX_INVOCATION_DIR}/.bundlex_precompiled"')
-        for f in ctx.files.precompiled_os_deps:
+        for f in _payloads(ctx).precompiled_os_deps:
             precompiled_commands.append(
                 'cp "{src}" "${{MIX_INVOCATION_DIR}}/.bundlex_precompiled/{name}"'.format(
                     src = f.path,
@@ -850,7 +854,7 @@ def _impl(ctx):
     # the same tree serve the compile (executor's) and the overlay (target's).
     if ctx.attr.app_name in _HOST_NIF_APPS:
         precompiled_commands.append('mkdir -p "${MIX_INVOCATION_DIR}/.elixir_make_cache"')
-        for f in ctx.files.elixir_make_nifs:
+        for f in _payloads(ctx).elixir_make_nifs:
             precompiled_commands.append(
                 'cp "{src}" "${{MIX_INVOCATION_DIR}}/.elixir_make_cache/{name}"'.format(
                     src = f.path,
@@ -858,9 +862,9 @@ def _impl(ctx):
                 ),
             )
 
-    if ctx.files.precompiled_nifs:
+    if _payloads(ctx).precompiled_nifs:
         precompiled_commands.append('mkdir -p "${MIX_INVOCATION_DIR}/.precompiled_nifs"')
-        for f in ctx.files.precompiled_nifs:
+        for f in _payloads(ctx).precompiled_nifs:
             precompiled_commands.append(
                 'cp "{src}" "${{MIX_INVOCATION_DIR}}/.precompiled_nifs/{name}"'.format(
                     src = f.path,
@@ -1141,7 +1145,7 @@ find . -type l -delete
         mix_dir_cleanup = "" if ships_bundlex else 'trap \'rm -rf "${MIX_INVOCATION_DIR}"\' EXIT',
         project_dir = ctx.label.package,
         copy_srcs_commands = "\n".join(copy_srcs_commands + dep_source_commands + precompiled_commands),
-        archives = " ".join([shell.quote(a.path) for a in ctx.files.archives]),
+        archives = " ".join([shell.quote(a.path) for a in _payloads(ctx).archives]),
         target_triple_exports = "\n".join([
             "export {}={}".format(k, v)
             for k, v in sorted(_target_triple_env(ctx).items())
@@ -1169,15 +1173,15 @@ find . -type l -delete
         transitive = [
             erlang_runfiles.files,
             elixir_runfiles.files,
-            depset(ctx.files.archives),
+            depset(_payloads(ctx).archives),
             depset(dep_source_files),
-            depset(ctx.files.precompiled_os_deps),
-            depset(ctx.files.precompiled_nifs),
-            depset(ctx.files.elixir_make_nifs if ctx.attr.app_name in _HOST_NIF_APPS else []),
-            depset(ctx.files.elixir_make_nifs_target if ctx.attr.app_name in _HOST_NIF_APPS else []),
+            depset(_payloads(ctx).precompiled_os_deps),
+            depset(_payloads(ctx).precompiled_nifs),
+            depset(_payloads(ctx).elixir_make_nifs if ctx.attr.app_name in _HOST_NIF_APPS else []),
+            depset(_payloads(ctx).elixir_make_nifs_target if ctx.attr.app_name in _HOST_NIF_APPS else []),
             # Only for _OPENSSL_APPS; _openssl_sysroot_exports is empty otherwise, and an
             # unreferenced input would just be staged and never read.
-            depset([ctx.file.openssl_sysroot] if ctx.attr.app_name in _OPENSSL_APPS else []),
+            depset([_payloads(ctx).openssl_sysroot] if _payloads(ctx).openssl_sysroot and ctx.attr.app_name in _OPENSSL_APPS else []),
             depset(native_lib_files),
             depset(erl_libs_files),
             # Referenced in place via ERL_LIBS rather than staged, so they have to be
@@ -1240,10 +1244,6 @@ mix_app = rule(
         # essentially every project: Mix refuses to start when it cannot resolve an SCM for
         # a dependency in mix.exs, even a :dev-only one it would never compile. Nothing is
         # fetched -- HEX_OFFLINE is set and deps come from Bazel.
-        "archives": attr.label_list(
-            allow_files = [".ez"],
-            default = ["@hex//:archive"],
-        ),
         "extra_apps": attr.string_list(),
         "setup": attr.string(),
         # Bazel-built NIF shared libraries to stage into priv/native before compiling,
@@ -1268,38 +1268,19 @@ mix_app = rule(
         "extra_config": attr.string_list(),
         # Archives Bundlex would otherwise download mid-build. Only staged when the
         # package actually depends on bundlex, so this costs nothing for the other 271.
-        "precompiled_os_deps": attr.label_list(
-            allow_files = True,
-            default = [],
-        ),
         # Precompiled Rustler NIF archives, so rustler_precompiled finds its artefact in a
         # declared input instead of fetching it. Staged for every package; the ones that
         # use no precompiled NIF never look. See //third_party/precompiled_nifs.
-        "precompiled_nifs": attr.label_list(
-            allow_files = True,
-            default = [],
-        ),
         # A target-architecture OpenSSL, extracted only for _OPENSSL_APPS. It is an
         # attribute rather than a hardcoded label so a caller can point a package at a
         # different OpenSSL without editing this rule. See //third_party/openssl.
         # Precompiled elixir_make artefacts for BOTH architectures, and separately just the
         # target's. Only _HOST_NIF_APPS stage either. See //third_party/precompiled_nifs.
-        "elixir_make_nifs": attr.label_list(
-            allow_files = True,
-            default = [],
-        ),
-        "elixir_make_nifs_target": attr.label_list(
-            allow_files = True,
-            default = [],
-        ),
-        "openssl_sysroot": attr.label(
-            allow_single_file = True,
-            default = None,
-        ),
         "mix_env": attr.string(default = "prod"),
         "deps": attr.label_list(providers = [ErlangAppInfo]),
         # The static C++ runtime archives for this configuration, linked into any Bundlex
         # native that has C++ sources. See the --whole-archive block in _impl.
+        "_payloads": attr.label(default = Label("//:mix_payloads")),
         "_check_undefined_cxx": attr.label(
             allow_single_file = True,
             default = Label("//private:check_undefined_cxx.py"),
@@ -1307,10 +1288,6 @@ mix_app = rule(
         # The C++ static runtime a NIF links when it compiles C++. No default: a ruleset
         # cannot name the consumer's toolchain repository, and a NIF that links no C++
         # runtime builds clean and then fails dlopen on the first unresolved symbol.
-        "cxx_static_runtime": attr.label(
-            allow_files = True,
-            default = None,
-        ),
         # Read only to answer "what CPU is this build FOR". See _target_triple_env.
         "_cpu_aarch64": attr.label(default = "@platforms//cpu:aarch64"),
         "_os_linux": attr.label(default = "@platforms//os:linux"),
