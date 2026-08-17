@@ -14,18 +14,9 @@ toolchain_type(
     visibility = ["//visibility:public"],
 )
 
-load("//private:mix_payloads.bzl", "mix_payloads")
-
-# Empty by default: a repository with no NIFs and no Hex archive needs no payloads.
-mix_payloads(
-    name = "no_mix_payloads",
-    visibility = ["//visibility:public"],
-)
-
-# Point this at your own mix_payloads target:
-#     build --@rules_elixir//:mix_payloads=//build:mix_payloads
-label_flag(
-    name = "mix_payloads",
-    build_setting_default = ":no_mix_payloads",
+# Repository-specific inputs every Mix compile stages -- see //private:mix_payloads.bzl.
+# Optional: a repository with no NIFs and no Hex archive registers none.
+toolchain_type(
+    name = "mix_payloads_toolchain_type",
     visibility = ["//visibility:public"],
 )

@@ -7,16 +7,27 @@ labels, which resolved against whichever module happened to hold the rule.
 They are not per-target either: every mix_app in a repository wants the same set, and there
 are a few hundred of them once a Hex closure is generated.
 
-So they are one target, selected by a flag:
+That makes them a toolchain -- implementation-specific inputs a rule resolves rather than
+takes, declared once in the module graph:
 
     # //build/BUILD.bazel
-    mix_payloads(name = "mix_payloads", archives = ["@hex//:archive"], ...)
+    mix_payloads(name = "payloads", archives = ["@hex//:archive"], ...)
+    toolchain(
+        name = "mix_payloads",
+        toolchain = ":payloads",
+        toolchain_type = "@rules_elixir//:mix_payloads_toolchain_type",
+    )
 
-    # .bazelrc
-    build --@rules_elixir//:mix_payloads=//build:mix_payloads
+    # MODULE.bazel
+    register_toolchains("//build:mix_payloads")
 
-The default is an empty instance, so a repository with no NIFs and no Hex archive needs none
-of this.
+Not a flag in a .bazelrc. A flag is a knob meant to vary, and this never does; worse, a
+.bazelrc is client configuration rather than the build graph, so an invocation that does not
+read it would silently compile NIFs with no C++ runtime -- which links clean and fails at
+dlopen. MODULE.bazel travels with the repository.
+
+`elixir_make_nifs_target` is genuinely target-platform-specific, so toolchain resolution is
+doing real work here and not merely carrying a constant.
 """
 
 MixPayloadsInfo = provider(
@@ -33,7 +44,7 @@ MixPayloadsInfo = provider(
 )
 
 def _impl(ctx):
-    return [MixPayloadsInfo(
+    return [platform_common.ToolchainInfo(payloads = MixPayloadsInfo(
         archives = ctx.files.archives,
         cxx_static_runtime = ctx.files.cxx_static_runtime,
         elixir_make_nifs = ctx.files.elixir_make_nifs,
@@ -41,7 +52,7 @@ def _impl(ctx):
         openssl_sysroot = ctx.file.openssl_sysroot,
         precompiled_nifs = ctx.files.precompiled_nifs,
         precompiled_os_deps = ctx.files.precompiled_os_deps,
-    )]
+    ))]
 
 mix_payloads = rule(
     implementation = _impl,
@@ -54,5 +65,15 @@ mix_payloads = rule(
         "precompiled_nifs": attr.label_list(allow_files = True),
         "precompiled_os_deps": attr.label_list(allow_files = True),
     },
-    provides = [MixPayloadsInfo],
+)
+
+# What a rule sees when no toolchain is registered.
+EMPTY_PAYLOADS = MixPayloadsInfo(
+    archives = [],
+    cxx_static_runtime = [],
+    elixir_make_nifs = [],
+    elixir_make_nifs_target = [],
+    openssl_sysroot = None,
+    precompiled_nifs = [],
+    precompiled_os_deps = [],
 )

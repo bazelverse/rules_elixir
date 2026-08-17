@@ -34,7 +34,7 @@ project dropped Bazel in March 2025. Two deliberate departures from upstream:
     that a dependent's `-include_lib("app/include/foo.hrl")` resolves.
 """
 
-load("//private:mix_payloads.bzl", "MixPayloadsInfo")
+load("//private:mix_payloads.bzl", "EMPTY_PAYLOADS")
 load("@bazel_skylib//lib:shell.bzl", "shell")
 load("@rules_cc//cc:action_names.bzl", "ACTION_NAMES")
 load("@rules_cc//cc:find_cc_toolchain.bzl", "find_cc_toolchain", "use_cc_toolchain")
@@ -390,8 +390,11 @@ def _compiles_native_code(ctx):
             return True
     return False
 
+_PAYLOADS_TOOLCHAIN = "//:mix_payloads_toolchain_type"
+
 def _payloads(ctx):
-    return ctx.attr._payloads[MixPayloadsInfo]
+    toolchain = ctx.toolchains[_PAYLOADS_TOOLCHAIN]
+    return toolchain.payloads if toolchain else EMPTY_PAYLOADS
 
 def _impl(ctx):
     (erlang_home, _, erlang_runfiles) = erlang_dirs(ctx)
@@ -1280,7 +1283,6 @@ mix_app = rule(
         "deps": attr.label_list(providers = [ErlangAppInfo]),
         # The static C++ runtime archives for this configuration, linked into any Bundlex
         # native that has C++ sources. See the --whole-archive block in _impl.
-        "_payloads": attr.label(default = Label("//:mix_payloads")),
         "_check_undefined_cxx": attr.label(
             allow_single_file = True,
             default = Label("//private:check_undefined_cxx.py"),
@@ -1293,6 +1295,9 @@ mix_app = rule(
         "_os_linux": attr.label(default = "@platforms//os:linux"),
     },
     provides = [ErlangAppInfo],
-    toolchains = ["//:toolchain_type"] + use_cc_toolchain(),
+    toolchains = [
+        "//:toolchain_type",
+        config_common.toolchain_type(_PAYLOADS_TOOLCHAIN, mandatory = False),
+    ] + use_cc_toolchain(),
     fragments = ["cpp"],
 )
