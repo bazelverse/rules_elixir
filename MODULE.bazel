@@ -46,10 +46,14 @@ bazel_dep(
 # repository's own build and nothing else. A consumer of rules_elixir needs the
 # same block in its own MODULE.bazel; see the Installation section of README.md.
 # Drop it once rules_erlang is published.
+# Requires rules_erlang effba32 or later: OTP is staged as a build artifact and the
+# toolchain helpers are erlang_dirs/erlang_preamble. Until that commit is pushed, a
+# standalone build here needs
+#     --override_module=rules_erlang=<path to a local checkout>
 git_override(
     module_name = "rules_erlang",
     remote = "https://github.com/bazelverse/rules_erlang.git",
-    commit = "5531a30ab87ed7e2a63eb1a901c4eeac1bb2bcc6",  # 3.18.0
+    commit = "effba3214d0e5637c66430cad67d59810ce8f1c3",
 )
 
 elixir_config = use_extension(
