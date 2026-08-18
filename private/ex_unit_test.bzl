@@ -24,6 +24,28 @@ def _package_relative_path(ctx, p):
         return p
     return p.removeprefix(ctx.label.package + "/")
 
+def _runfiles_path(f):
+    """Where `f` can be read when the test runs.
+
+    Bazel starts the test with the working directory at $TEST_SRCDIR/$TEST_WORKSPACE, and every
+    input sits there at its short_path. Use `File.path` and a GENERATED input resolves to
+    `bazel-out/<cfg>/bin/...`, which exists nowhere at test time -- and does so silently for
+    source inputs, whose `path` and `short_path` are equal.
+    """
+    return f.short_path
+
+def _staged_path(f):
+    """Where `f` must land under TEST_TMPDIR.
+
+    The test cds to ${TEST_TMPDIR}/<package> and names its inputs by workspace-relative paths,
+    so the staged tree mirrors the workspace. An external input's short_path starts with `../`,
+    which would place it outside TEST_TMPDIR; those go under `external/` instead.
+    """
+    p = f.short_path
+    if p.startswith("../"):
+        return path_join("external", p.removeprefix("../"))
+    return p
+
 def _impl(ctx):
     # TEST_TMPDIR, not TEST_UNDECLARED_OUTPUTS_DIR.
     #
@@ -48,8 +70,8 @@ def _impl(ctx):
     # means -- whatever a test chooses to write there.
     copy_srcs_and_data_commands = [
         'mkdir -p $(dirname "{dst}") && cp "{src}" "{dst}"'.format(
-            src = s.path,
-            dst = path_join("${TEST_TMPDIR}", s.path),
+            src = _runfiles_path(s),
+            dst = path_join("${TEST_TMPDIR}", _staged_path(s)),
         )
         for s in ctx.files.srcs + ctx.files.data
     ]
@@ -142,7 +164,7 @@ rm test.log
             setup = ctx.attr.setup,
             elixir_opts = " ".join([shell.quote(opt) for opt in ctx.attr.elixir_opts]),
             srcs_args = " \\\n    ".join([
-                "-r {}".format(_package_relative_path(ctx, s.path))
+                "-r {}".format(_package_relative_path(ctx, _staged_path(s)))
                 for s in ctx.files.srcs
             ]),
         )
