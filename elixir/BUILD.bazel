@@ -6,7 +6,6 @@ elixir_as_app(
     visibility = ["//visibility:public"],
 )
 
-
 elixir_as_app(
     name = "eex",
     app = "eex",
