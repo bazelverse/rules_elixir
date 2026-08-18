@@ -46,23 +46,42 @@ def _impl(ctx):
 
     # -escript main <Module>: the entry point. An Elixir module Foo.Bar is the Erlang atom
     # 'Elixir.Foo.Bar', which is why this is spelled out rather than derived.
+    # An entry shim, compiled with erlc. `mix escript.build` generates the equivalent, and
+    # without it stdio stays in list mode: IO.binread/2 hands back a list of code points and
+    # any plugin reading binary input dies with "construction of binary failed".
+    shim = ctx.label.name + "_main"
     script = preamble + """
 export HOME="$PWD"
+mkdir -p {shim_dir}
+cat > {shim_dir}/{shim}.erl <<'SHIM'
+-module({shim}).
+-export([main/1]).
+main(Args) ->
+    io:setopts([binary]),
+    {{ok, _}} = application:ensure_all_started(elixir),
+    %% Load, do not start: a library app is never started, but code that asks for its own
+    %% version via application:get_key/2 gets `undefined` unless it is loaded.
+    _ = application:ensure_all_started({app_name}),
+    'Elixir.{entry_module}':main(Args).
+SHIM
+"$ABS_ERLANG_HOME"/bin/erlc -o {shim_dir} {shim_dir}/{shim}.erl
+
 "$ABS_ELIXIR_HOME"/bin/elixir -e '
-  libs = Path.wildcard("{erl_libs}/*/ebin")
+  root = "{erl_libs}"
   entries =
-    Enum.flat_map(libs, fn ebin ->
-      Enum.map(Path.wildcard(ebin <> "/*.{{beam,app}}"), fn f ->
-        {{String.to_charlist(Path.basename(f)), File.read!(f)}}
-      end)
+    Path.wildcard(root <> "/*/ebin/*.{{beam,app}}")
+    |> Enum.map(fn f ->
+      {{String.to_charlist(Path.relative_to(f, root)), File.read!(f)}}
     end)
+
+  entries = [{{~c"{shim}.beam", File.read!("{shim_dir}/{shim}.beam")}} | entries]
 
   :ok =
     :escript.create(
       ~c"{output}",
       [
         {{:shebang, ~c"/usr/bin/env escript"}},
-        {{:emu_args, ~c"-escript main Elixir.{entry_module} -noshell"}},
+        {{:emu_args, ~c"-escript main {shim} -noshell"}},
         {{:archive, entries, []}}
       ]
     )
@@ -72,6 +91,9 @@ chmod +x {output}
         erl_libs = erl_libs_path,
         entry_module = ctx.attr.entry_module,
         output = archive.path,
+        shim = shim,
+        shim_dir = archive.path + "_shim",
+        app_name = ctx.attr.app[ErlangAppInfo].app_name,
     )
 
     ctx.actions.run_shell(
@@ -93,6 +115,9 @@ chmod +x {output}
         output = launcher,
         content = """#!/usr/bin/env bash
 set -eo pipefail
+# protoc gives a plugin a bare environment. Elixir's startup reads HOME, and erl wants a
+# writable one for its cookie.
+export HOME="${{HOME:-$PWD}}"
 RUNFILES="${{RUNFILES_DIR:-$0.runfiles}}"
 if [[ "{erlang_home}" == /* ]]; then
     ESCRIPT="{erlang_home}/bin/escript"
