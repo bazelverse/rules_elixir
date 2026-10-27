@@ -1,0 +1,29 @@
+load("@rules_elixir//private:elixir_bytecode.bzl", "elixir_bytecode")
+
+# Each source has one warning. With --warnings-as-errors the build must
+# fail; .github/workflows/test.yaml checks that, so these are manual.
+#   unused:  an unused variable, a compile-time warning
+#   undef:   a call to an undefined remote function, a warning the
+#            compiler emits after the module is compiled
+#   io_warn: IO.warn at compile time, printed without indentation
+[
+    elixir_bytecode(
+        name = name,
+        srcs = [name + ".ex"],
+        dest = name,
+        elixirc_opts = ["--warnings-as-errors"],
+        tags = ["manual"],
+    )
+    for name in [
+        "unused",
+        "undef",
+        "io_warn",
+    ]
+]
+
+# The same warning as :unused, without --warnings-as-errors. It builds.
+elixir_bytecode(
+    name = "allowed",
+    srcs = ["unused.ex"],
+    dest = "allowed",
+)

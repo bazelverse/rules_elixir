@@ -58,11 +58,26 @@ fi
 {env}
 
 {setup}
-set -x
+diagnostics=$(mktemp)
+status=0
 ${{ABS_ELIXIR_HOME}}/bin/elixirc \\
     -o {out_dir} \\
     {elixirc_opts} \\
-    {srcs}
+    {srcs} 2>"$diagnostics" || status=$?
+cat "$diagnostics" >&2
+# Released Elixir ignores --warnings-as-errors in elixirc and exits 0 on
+# warnings. Fail here instead. Once elixirc fails by itself, status is
+# not 0 and this check does nothing. The launcher's warning about a
+# latin1 file name encoding is not a compiler warning, so it is skipped.
+if [ "$status" = 0 ] && [ -n "{warnings_as_errors}" ] && awk '
+    /^[[:space:]]*warning:/ && !/native name encoding of latin1/ {{ found = 1 }}
+    END {{ exit !found }}
+' "$diagnostics"; then
+    echo "Compilation failed due to warnings while using the --warnings-as-errors option" >&2
+    status=1
+fi
+rm -f "$diagnostics"
+exit "$status"
 """.format(
         maybe_install_erlang = maybe_install_erlang(ctx),
         erlang_home = erlang_home,
@@ -73,6 +88,7 @@ ${{ABS_ELIXIR_HOME}}/bin/elixirc \\
         out_dir = ebin.path,
         elixirc_opts = " ".join([shell.quote(opt) for opt in ctx.attr.elixirc_opts]),
         srcs = " ".join([f.path for f in ctx.files.srcs]),
+        warnings_as_errors = "1" if "--warnings-as-errors" in ctx.attr.elixirc_opts else "",
     )
 
     inputs = depset(
