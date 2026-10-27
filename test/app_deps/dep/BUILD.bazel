@@ -1,0 +1,7 @@
+load("@rules_elixir//:elixir_app.bzl", "elixir_app")
+
+package(default_visibility = ["//app_deps:__pkg__"])
+
+elixir_app(
+    app_name = "dep_app",
+)

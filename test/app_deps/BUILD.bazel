@@ -1,0 +1,16 @@
+load("@rules_elixir//:elixir_app.bzl", "elixir_app")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+
+elixir_app(
+    app_name = "main_app",
+    deps = ["//app_deps/dep:erlang_app"],
+)
+
+# The .app file must list dep_app in applications, so OTP starts it first.
+sh_test(
+    name = "app_file_lists_deps_test",
+    size = "small",
+    srcs = ["app_file_lists_deps_test.sh"],
+    args = ["$(rootpath :app_file)"],
+    data = [":app_file"],
+)
