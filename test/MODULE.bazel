@@ -4,6 +4,10 @@ module(
 )
 
 bazel_dep(
+    name = "bazel_skylib",
+    version = "1.9.2",
+)
+bazel_dep(
     name = "rules_erlang",
     version = "3.18.0",
 )
@@ -21,6 +25,12 @@ local_path_override(
 bazel_dep(
     name = "rules_shell",
     version = "0.8.0",
+)
+
+# target_compatible_with in BUILD.bazel uses @platforms//:incompatible.
+bazel_dep(
+    name = "platforms",
+    version = "1.1.0",
 )
 
 # See the note in the root MODULE.bazel. This is a separate module, so it needs

@@ -1,3 +1,4 @@
+load("@bazel_skylib//rules:build_test.bzl", "build_test")
 load("@rules_elixir//:elixir_app.bzl", "elixir_app")
 load("@rules_elixir//:ex_unit_test.bzl", "ex_unit_test")
 load(
@@ -13,6 +14,65 @@ elixir_app(
     elixirc_opts = [
         "--warnings-as-errors",
     ],
+)
+
+# A second app in the same package. Its internal targets and output dirs
+# are prefixed with its name, so they do not clash with the default ones.
+# testonly is forwarded to every generated target; if it were not, the
+# final target would fail analysis because it depends on testonly ones.
+elixir_app(
+    name = "other",
+    app_name = "other",
+    srcs = ["other_lib/other.ex"],
+    testonly = True,
+    tags = ["other_app"],
+)
+
+build_test(
+    name = "app_targets_test",
+    targets = [
+        ":erlang_app",
+        ":beam_files",
+        ":app_file",
+        ":ebin",
+        ":elixir_without_app_overlap",
+        ":other",
+        ":other_beam_files",
+        ":other_app_file",
+        ":other_ebin",
+        ":other_elixir_without_app_overlap",
+    ],
+)
+
+sh_test(
+    name = "app_names_test",
+    size = "small",
+    srcs = ["app_names_test.sh"],
+    args = [
+        "beam_files=$(rootpath :beam_files)",
+        "ebin=$(rootpath :ebin)",
+        "unconsolidated=$(rootpath :elixir_without_app_overlap)",
+        "other/beam_files=$(rootpath :other_beam_files)",
+        "other/ebin=$(rootpath :other_ebin)",
+        "other/unconsolidated=$(rootpath :other_elixir_without_app_overlap)",
+    ],
+    data = [
+        ":beam_files",
+        ":ebin",
+        ":elixir_without_app_overlap",
+        ":other_beam_files",
+        ":other_ebin",
+        ":other_elixir_without_app_overlap",
+    ],
+)
+
+# Incompatible with every platform, so //... skips all of its targets.
+# .github/workflows/test.yaml checks that building it directly fails.
+elixir_app(
+    name = "incompatible_app",
+    app_name = "incompatible_app",
+    srcs = ["incompatible_lib/incompatible.ex"],
+    target_compatible_with = ["@platforms//:incompatible"],
 )
 
 escript_archive(

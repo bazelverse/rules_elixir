@@ -71,6 +71,14 @@ jobs:
         run: |
           grep -E "Result: 2 passed|2 tests, 0 failures" \
             bazel-testlogs/two_file_test/test.log
+      - name: INCOMPATIBLE APP IS SKIPPED
+        working-directory: test
+        # //... above skipped it. Asking for it directly must fail.
+        run: |
+          if bazelisk build //:incompatible_app; then
+            echo "//:incompatible_app built despite target_compatible_with"
+            exit 1
+          fi
       - name: EXPECTED FAILURES FAIL
         working-directory: test
         run: |
