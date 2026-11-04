@@ -50,6 +50,7 @@ def elixir_app(
         app_name = app_name,
         extra_apps = ["elixir"] + extra_apps,
         modules = [":beam_files"],
+        deps = deps,
         **kwargs
     )
 
