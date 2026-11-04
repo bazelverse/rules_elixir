@@ -77,6 +77,20 @@ jobs:
           ! bazelisk test //:failing_test
           ! bazelisk test //:broken_test
           ! bazelisk test //:empty_test
+      - name: WARNINGS AS ERRORS FAIL
+        working-directory: test
+        run: |
+          # "! cmd" does not stop a "bash -e" step, so test the status
+          # explicitly.
+          for app in unused undef io_warn; do
+            if bazelisk build //warnings:$app 2> warnings_$app.log; then
+              echo "//warnings:$app built despite --warnings-as-errors"
+              exit 1
+            fi
+            cat warnings_$app.log
+            grep -F "Compilation failed due to warnings while using the --warnings-as-errors option" \
+              warnings_$app.log
+          done
       - name: UPLOAD TEST LOGS
         if: always()
         uses: actions/upload-artifact@v4
