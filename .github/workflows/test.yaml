@@ -84,6 +84,40 @@ jobs:
           name: bazel-testlogs-${{ matrix.otp }}
           path: |
             test/bazel-testlogs/*
+  test-windows:
+    # ex_unit_test only. Targets with elixir_app deps run elixirc through
+    # bin/elixir, which misreads paths under Git Bash, so they stay out.
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: CHECKOUT REPOSITORY
+        uses: actions/checkout@v4
+      - name: SETUP ERLANG/ELIXIR
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: "29.0"
+          elixir-version: "1.20.3-otp-29"
+      - name: CONFIGURE
+        working-directory: test
+        run: |
+          echo "build --color=yes" >> user.bazelrc
+      - name: TEST
+        working-directory: test
+        run: |
+          bazelisk test //:assertion_test //:helped_test //:two_file_test
+      - name: EXPECTED FAILURES FAIL
+        working-directory: test
+        run: |
+          if bazelisk test //:failing_test; then
+            echo "failing_test passed" >&2
+            exit 1
+          fi
+          if bazelisk test //:empty_test; then
+            echo "empty_test passed" >&2
+            exit 1
+          fi
   examples-basic:
     runs-on: ubuntu-latest
     strategy:
