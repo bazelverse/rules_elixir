@@ -24,6 +24,12 @@ def _package_relative_path(ctx, p):
         return p
     return p.removeprefix(ctx.label.package + "/")
 
+def _windows_dir(path):
+    return path.replace("/", "\\")
+
+def _is_absolute(path):
+    return path.startswith("/") or (len(path) > 1 and path[1] == ":")
+
 def _impl(ctx):
     # TEST_TMPDIR, not TEST_UNDECLARED_OUTPUTS_DIR.
     #
@@ -147,10 +153,64 @@ rm test.log
             ]),
         )
     else:
-        fail("not implemented")
+        if maybe_install_erlang(ctx, short_path = True):
+            fail("ex_unit_test on Windows needs an external Erlang")
+        env = "\n".join([
+            "set {}={}".format(k, v)
+            for k, v in ctx.attr.env.items()
+        ])
         output = ctx.actions.declare_file(ctx.label.name + ".bat")
-        script = """
-"""
+        copy_srcs_and_data_commands = [
+            'if not exist "%TEST_TMPDIR%\\{dir}" mkdir "%TEST_TMPDIR%\\{dir}"\r\ncopy /y "{src}" "%TEST_TMPDIR%\\{src}" >nul'.format(
+                dir = _windows_dir(s.path.rpartition("/")[0]),
+                src = _windows_dir(s.path),
+            )
+            for s in ctx.files.srcs + ctx.files.data
+        ]
+        if _is_absolute(elixir_home):
+            abs_elixir_home = _windows_dir(elixir_home)
+        else:
+            abs_elixir_home = "%CD%\\" + _windows_dir(elixir_home)
+        script = """@echo off
+setlocal
+set ELIXIR_HOME={elixir_home}
+set PATH=%ELIXIR_HOME%\\bin;{erlang_home}\\bin;%PATH%
+set ERL_LIBS=%TEST_SRCDIR%\\%TEST_WORKSPACE%\\{erl_libs_path}
+
+{copy_srcs_and_data_commands}
+
+cd /d "%TEST_TMPDIR%\\{package}"
+set HOME=%CD%
+
+{env}
+
+{setup}
+call "%ELIXIR_HOME%\\bin\\elixir.bat" {elixir_opts} {srcs_args} > test.log 2>&1
+set STATUS=%ERRORLEVEL%
+type test.log
+if not "%STATUS%"=="0" exit /b %STATUS%
+findstr /c:"excluded" test.log >nul && goto :done
+findstr /r /c:"Result: 0 tests" /c:"[^0-9]0 tests," /c:"^0 tests," test.log >nul
+if not errorlevel 1 (
+    echo ex_unit_test: the suite executed no tests, and excluded none 1>&2
+    exit /b 1
+)
+:done
+del test.log
+""".format(
+            elixir_home = abs_elixir_home,
+            erlang_home = _windows_dir(erlang_home),
+            erl_libs_path = _windows_dir(erl_libs_path),
+            package = _windows_dir(package),
+            copy_srcs_and_data_commands = "\r\n".join(copy_srcs_and_data_commands),
+            env = env,
+            setup = ctx.attr.setup,
+            elixir_opts = " ".join(ctx.attr.elixir_opts),
+            srcs_args = " ".join([
+                "-r {}".format(_windows_dir(_package_relative_path(ctx, s.path)))
+                for s in ctx.files.srcs
+            ]),
+        ).replace("\r\n", "\n").replace("\n", "\r\n")
 
     ctx.actions.write(
         output = output,
